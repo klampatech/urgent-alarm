@@ -7,7 +7,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Gap |
 |-------------|--------|-----|
-| 2. Escalation Chain Engine | Partial | Missing `get_next_unfired_anchor`, `snoozed_to`/`tts_fallback` fields in schema, unit tests for all 6 scenarios |
+| 2. Escalation Chain Engine | Partial | Missing `get_next_unfired_anchor` function, `snoozed_to`/`tts_fallback` fields in schema, unit tests for all 6 scenarios, `tts_clip_path` column exists but not populated on anchor insert (line 508-511) |
 | 3. Reminder Parsing | Partial | Keyword parser exists (test_server.py:193-296), missing LLM adapter interface, mock adapter, system prompt-based extraction |
 | 4. Voice & TTS Generation | Partial | Templates exist (1 per tier, test_server.py:299-350), missing TTS adapter, caching at `/tts_cache/{reminder_id}/`, needs 3+ variations per tier |
 | 5. Notification & Alarm | None | DND handling, quiet hours (10pm-7am), chain overlap serialization, notification tier sounds, visual+vibration at T-5 |
