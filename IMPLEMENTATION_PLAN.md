@@ -2,28 +2,38 @@
 
 ## Overview
 
-This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04-08.spec.md`) to implementation tasks. 
+This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04-08.spec.md`) to implementation tasks, prioritizing based on dependencies and blocking relationships.
 
-**Current Implementation Status:** `src/test_server.py` contains a proof-of-concept HTTP server with basic chain computation, keyword parsing, voice templates, and SQLite storage. It compiles successfully but is **NOT production-ready** — structured as a monolith with incomplete functionality.
-
-**Gap Summary:** 15 scenario files defined. Harness directory is empty. Modular architecture (`src/lib/`) does not exist. All components per spec sections 2-13 are either PARTIAL or NOT STARTED.
+**Current Implementation Status:** `src/test_server.py` contains a proof-of-concept HTTP server with basic chain computation, keyword parsing, voice templates, and SQLite storage. The harness directory is empty. The modular architecture (`src/lib/`) does not exist.
 
 ---
 
-## Current Codebase State
+## Gap Analysis Summary
 
-### ✅ What Exists
-| File/Directory | Status | Notes |
-|----------------|--------|-------|
-| `src/test_server.py` | PARTIAL | Basic HTTP server, chain engine, parser, voice templates, SQLite. Compiles OK. |
-| `scenarios/*.yaml` | COMPLETE | 15 scenario files covering TC-01 through TC-06 for each major component |
-| `specs/*.md` | COMPLETE | Full product and technical specification |
+| Component | Status | Coverage | Key Gaps |
+|-----------|--------|----------|----------|
+| Chain Engine | PARTIAL | ~65% | Missing `get_next_unfired_anchor()`, snooze recompute, validation bug |
+| Reminder Parser | PARTIAL | ~40% | Missing LLM adapter, mock adapter, enhanced keyword extraction |
+| Voice Personality | PARTIAL | ~50% | Missing message variations (3+ per tier), custom prompt support |
+| TTS Generation | NOT STARTED | ~10% | Text generation only, no audio/file caching |
+| Background Scheduling | NOT STARTED | 0% | Full implementation needed |
+| Notifications | NOT STARTED | 0% | Full implementation needed |
+| Calendar Integration | NOT STARTED | 0% | Full implementation needed |
+| Location Awareness | NOT STARTED | 0% | Full implementation needed |
+| Snooze & Dismissal | NOT STARTED | 0% | Full implementation needed |
+| Stats & Feedback | PARTIAL | ~40% | Missing streak counter, miss window, cap enforcement |
+| Sound Library | NOT STARTED | 0% | Full implementation needed |
+| Database Schema | PARTIAL | ~60% | Missing columns, no migration system |
+| Scenario Harness | NOT STARTED | 0% | Empty harness directory |
 
-### ❌ What's Missing (Critical)
-| Component | Status | Notes |
-|-----------|--------|-------|
-| `harness/` | EMPTY | Must create `scenario_harness.py` + supporting modules |
-| `src/lib/` | DOES NOT EXIST | Entire modular architecture must be created |
+**Estimated Total Completion:** ~5-8%
+
+---
+
+## Verified Bugs in Current Implementation
+
+1. **3-min buffer produces 2 anchors instead of 3** — Current: firm + alarm. Spec requires: firm + critical + alarm (TC-03)
+2. **120-min validation passes** — Should fail with "drive_duration exceeds time_to_arrival" (TC-04)
 
 ---
 
@@ -33,7 +43,7 @@ This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04
 **Spec Section:** Harness Validation  
 **Status:** NOT STARTED (blocking all validation)
 
-**Why Critical:** Cannot validate any implementation without the harness. All 15 scenarios are defined but unrunnable.
+**Why Critical:** Cannot validate any implementation without the harness. All 16 scenarios are defined but unrunnable.
 
 **Files to Create:**
 ```
@@ -50,40 +60,36 @@ harness/
 
 1. **`scenario_harness.py`** — Main entry point
    - Parse `--project` argument
-   - Load scenarios from `scenarios/*.yaml`
+   - Load scenarios from `scenarios/*.yaml` (or `/var/otto-scenarios/{project}/`)
    - For each scenario: execute trigger steps, run assertions, report PASS/FAIL
-   - Support `sudo` for system scenario path (`/var/otto-scenarios/{project}/`)
+   - Support `sudo` for system scenario path
+   - Handle `OTTO_SCENARIO_DIR` environment variable
 
 2. **`parser.py`** — YAML loader
-   - Load all `.yaml` files from `scenarios/` directory
+   - Load all `.yaml` files from configured directory
    - Parse `trigger.steps[]` for API sequences
    - Parse `assertions[]` for validation checks
    - Support `${variable}` substitution from `env` block
 
 3. **`client.py`** — HTTP client
-   - `POST /reminders` — create reminder
-   - `POST /parse` — parse natural language
-   - `POST /voice/message` — generate voice message
-   - `POST /history` — record outcome
-   - `POST /anchors/fire` — mark anchor fired
-   - `GET /chain` — compute chain
-   - `GET /stats/hit-rate` — get hit rate
+   - `POST /reminders`, `POST /parse`, `POST /voice/message`
+   - `POST /history`, `POST /anchors/fire`
+   - `GET /chain`, `GET /reminders`, `GET /stats/hit-rate`, `GET /health`
 
 4. **`assertions.py`** — Validation assertions
    - `HTTPStatusAssertion` — verify response code matches expected
-   - `DBRecordAssertion` — query SQLite directly, verify record exists
+   - `DBRecordAssertion` — query SQLite directly at `/tmp/urgent-alarm.db`
    - `LLMJudgeAssertion` — call LLM to evaluate scenario success
-   - Print PASS/FAIL per assertion with details
 
 **Acceptance Criteria:**
 - [ ] `python3 harness/scenario_harness.py --project otto-matic` runs against `scenarios/*.yaml`
-- [ ] Scenario parser loads all 15 YAML files
+- [ ] Scenario parser loads all 16 YAML files
 - [ ] HTTP assertions work against `localhost:8090`
-- [ ] DB record assertions query SQLite directly at `/tmp/urgent-alarm.db`
+- [ ] DB record assertions query SQLite directly
 - [ ] Results printed with PASS/FAIL per scenario with details
 
 **Dependencies:** None  
-**Validation:** Manual test run: `python3 src/test_server.py &` then `python3 harness/scenario_harness.py --project otto-matic`
+**Validation:** `python3 src/test_server.py &` then `sudo python3 harness/scenario_harness.py --project otto-matic`
 
 ---
 
@@ -171,13 +177,6 @@ src/lib/
     └── manager.py             # Selection and fallback
 ```
 
-**Task Details:**
-
-1. Create all `__init__.py` files with proper module exports
-2. Ensure no circular dependencies between modules
-3. Each module should be independently importable
-4. All adapters should implement base interfaces for easy mocking
-
 **Dependencies:** P0.1 (harness needed to validate)  
 **Validation:** `python3 -c "from src.lib import *"` — all imports succeed
 
@@ -187,9 +186,9 @@ src/lib/
 
 ### 1.1 — Database Schema & Migrations
 **Spec Section:** 13  
-**Status:** PARTIAL (basic schema in `test_server.py`)
+**Status:** PARTIAL (basic schema in test_server.py)
 
-**What's Done (in test_server.py):**
+**What's Done:**
 - ✅ Basic 5-table schema (`reminders`, `anchors`, `history`, `destination_adjustments`, `user_preferences`)
 - ✅ CASCADE delete on reminders → anchors
 - ✅ UUID generation for IDs
@@ -224,22 +223,23 @@ src/lib/
 - ✅ Compressed chains for 10-24, 5-9, ≤5 min buffers
 - ✅ `validate_chain()` function
 
-**What's Missing:**
-- [ ] **Move to modular:** `src/lib/chain/engine.py`
+**What's Missing / Bugs:**
+- [ ] **BUG:** 3-min buffer produces 2 anchors but spec requires 3 (firm + critical + alarm)
+- [ ] **BUG:** 120-min validation passes but should fail with "drive_duration exceeds time_to_arrival"
 - [ ] **Missing:** `get_next_unfired_anchor(reminder_id, db)` function
 - [ ] **Missing:** `recompute_chain_after_snooze(reminder_id, snooze_minutes, db)` function
-- [ ] **Bug:** Validation doesn't check `drive_duration` can't exceed time_to_arrival
 - [ ] **Missing:** Chain determinism verification
-- [ ] **Missing:** Anchor re-computation for snooze scenarios (e.g., 3-min snooze shifts all remaining anchors)
+- [ ] **Move to modular:** `src/lib/chain/engine.py`
 
 **Tasks:**
 1. Create `src/lib/chain/engine.py` — refactor from test_server.py
-2. Add `get_next_unfired_anchor(reminder_id, db)` — returns earliest unfired anchor
-3. Add `recompute_chain_after_snooze(reminder_id, snooze_minutes, db)` — shift remaining anchors
-4. Fix validation: `drive_duration` cannot exceed time between now and arrival
-5. Write comprehensive tests for all 6 test scenarios
+2. Fix 3-min buffer: should produce firm + critical + alarm (not just firm + alarm)
+3. Fix validation: drive_duration > time_to_arrival → reject
+4. Add `get_next_unfired_anchor(reminder_id, db)` — returns earliest unfired anchor
+5. Add `recompute_chain_after_snooze(reminder_id, snooze_minutes, db)` — shift remaining anchors
+6. Write comprehensive tests for all 6 test scenarios
 
-**Dependencies:** 1.1  
+**Dependencies:** P0.2, 1.1  
 **Tests:** `tests/test_chain_engine.py` — TC-01 through TC-06
 
 ---
@@ -269,7 +269,7 @@ src/lib/
 1. Create `src/lib/parser/adapters/base.py` — `ILanguageModelAdapter` interface
 2. Create `src/lib/parser/adapters/keyword_extractor.py` — enhanced regex
 3. Create `src/lib/parser/adapters/llm_adapter.py` — MiniMax API
-4. Create `src/lib/parser/mock_adapter.py` — predefined fixture responses
+4. Create `src/lib/parser/adapters/mock_adapter.py` — predefined fixture responses
 5. Create `src/lib/parser/parser.py` — unified entry point
 6. Write tests for all 7 scenarios
 
@@ -300,7 +300,7 @@ src/lib/
 4. Create `src/lib/voice/custom_personalities.py` — user prompt support (max 200 chars)
 5. Write tests for TC-01 through TC-05
 
-**Dependencies:** None (can parallelize with 1.x)  
+**Dependencies:** P0.2 (can parallelize with 1.x)  
 **Tests:** `tests/test_voice_personalities.py` — TC-01 through TC-05
 
 ---
@@ -326,7 +326,7 @@ src/lib/
 **Tasks:**
 1. Create `src/lib/tts/adapters/base.py` — `ITTSAdapter` interface
 2. Create `src/lib/tts/adapters/elevenlabs_adapter.py` — ElevenLabs API
-3. Create `src/lib/tts/mock_adapter.py` — writes silent file for tests
+3. Create `src/lib/tts/adapters/mock_adapter.py` — writes silent file for tests
 4. Create `src/lib/tts/generator.py` — pre-generation for all anchors
 5. Create `src/lib/tts/cache_manager.py` — file management, cleanup on delete
 6. Implement fallback mechanism (system sound + notification text)
@@ -467,24 +467,6 @@ src/lib/
 
 ---
 
-## Priority 5: Integration & Testing
-
-### 5.1 — React Native App Structure
-**Status:** NOT STARTED
-
-**Tasks:**
-1. Create `src/App.tsx` — React Native entry point
-2. Create `src/screens/QuickAddScreen.tsx`
-3. Create `src/screens/RemindersListScreen.tsx`
-4. Create `src/screens/HistoryScreen.tsx`
-5. Create `src/screens/SettingsScreen.tsx`
-6. Create `src/lib/react-native/` adapters for platform APIs
-
-**Dependencies:** Phases 1-4 complete  
-**Tests:** E2E smoke tests with Detox
-
----
-
 ## Implementation Order Summary
 
 ```
@@ -494,7 +476,7 @@ Priority 0: Critical Path
 
 Priority 1: Core Engine
 ├── 1.1 Database Schema & Migrations
-└── 1.2 Escalation Chain Engine
+└── 1.2 Escalation Chain Engine (fix bugs: 3-min buffer, validation)
 
 Priority 2: User Input & AI
 ├── 2.1 Reminder Parser (can parallelize with 1.x)
@@ -511,21 +493,18 @@ Priority 4: User Interaction
 ├── 4.1 Snooze & Dismissal (depends on 3.1, 2.2, 2.3)
 ├── 4.2 Stats & Feedback (depends on 1.1)
 └── 4.3 Sound Library (depends on 1.1)
-
-Priority 5: Integration
-└── 5.1 React Native App (depends on all above)
 ```
 
 ---
 
-## Current Gaps Summary
+## Current Gaps Detail
 
 | Component | Status | Test Scenarios | Notes |
 |-----------|--------|----------------|-------|
-| P0.1 Scenario Harness | NOT STARTED | 0/15 | BLOCKING — cannot validate anything |
+| P0.1 Scenario Harness | NOT STARTED | 0/16 | BLOCKING — cannot validate anything |
 | P0.2 Modular Architecture | NOT STARTED | 0 | `src/lib/` does not exist |
 | 1.1 Database & Migrations | PARTIAL | 0/5 | Missing columns, no migration system |
-| 1.2 Chain Engine | PARTIAL | 2/6 | Missing `get_next_unfired_anchor`, snooze recompute |
+| 1.2 Chain Engine | PARTIAL | 2/6 | **BUGS:** 3-min → 2 anchors (need 3), 120-min validation passes (should fail) |
 | 2.1 Reminder Parser | PARTIAL | 1/7 | Missing LLM adapter, mock adapter |
 | 2.2 Voice Personality | PARTIAL | 0/5 | Missing message variations, custom prompt support |
 | 2.3 TTS Generation | NOT STARTED | 0/5 | Text generation only, no audio generation |
@@ -536,9 +515,6 @@ Priority 5: Integration
 | 4.1 Snooze & Dismissal | NOT STARTED | 0/6 | Full implementation needed |
 | 4.2 Stats & Feedback | PARTIAL | 2/7 | Missing streaks, miss window, cap |
 | 4.3 Sound Library | NOT STARTED | 0/5 | Full implementation needed |
-| 5.1 React Native App | NOT STARTED | 0 | Future phase |
-
-**Total:** ~5% implementation complete (3 partial, 12 not started)
 
 ---
 
@@ -548,6 +524,7 @@ Priority 5: Integration
 |------|--------|------------|
 | No harness = can't validate | Critical | Implement P0.1 first |
 | Modular structure missing | High | Implement P0.2 early |
+| Chain engine bugs | High | Fix in 1.2 - 3-min buffer, validation |
 | ElevenLabs API rate limits | Medium | Mock adapter + fallback |
 | Background task killed by OS | Medium | Recovery scan + 15-min grace |
 | LLM parsing failure | Medium | Keyword fallback with confidence |
@@ -557,10 +534,11 @@ Priority 5: Integration
 
 ## Success Criteria
 
-- [ ] Scenario harness runs all 15 scenarios and reports PASS/FAIL per scenario
+- [ ] Scenario harness runs all 16 scenarios and reports PASS/FAIL per scenario
 - [ ] Modular architecture in `src/lib/` with all modules implemented
-- [ ] All 42 acceptance criteria from spec sections 2-13 have passing tests
 - [ ] Chain engine produces correct anchors for all buffer sizes (TC-01 through TC-06)
+- [ ] **FIXED:** 3-min buffer produces exactly 3 anchors: firm, critical, alarm
+- [ ] **FIXED:** 120-min validation rejects with "drive_duration exceeds time_to_arrival"
 - [ ] LLM adapter is fully mock-able for CI
 - [ ] TTS caching eliminates runtime API calls
 - [ ] Background scheduling survives app termination
@@ -586,8 +564,11 @@ python3 -m py_compile harness/scenario_harness.py src/test_server.py
 python3 src/test_server.py &
 
 # Run harness against scenarios
-python3 harness/scenario_harness.py --project otto-matic
+sudo python3 harness/scenario_harness.py --project otto-matic
 
-# Or run pytest if harness tests are added
+# Or test with local scenarios
+OTTO_SCENARIO_DIR=./scenarios python3 harness/scenario_harness.py --project otto-matic
+
+# Run pytest if tests exist
 python3 -m pytest harness/
 ```
