@@ -4,29 +4,28 @@
 
 The Urgent Voice Alarm app helps users make time-sensitive appointments by providing adaptive escalation chains with AI-generated voice nudges. The system computes a timeline from departure to arrival and speaks with escalating urgency as the deadline approaches.
 
-**Current State:** Only a Python test server exists (`src/test_server.py`) with partial implementations of chain engine, parser, and voice templates. The full mobile app (React Native/Flutter) has not been started.
+**Current State:** A Python test server (`src/test_server.py`) exists with partial implementations of chain engine, parser, and voice templates. Scenario files exist in `scenarios/`. The harness infrastructure (`harness/scenario_harness.py`) does NOT exist yet.
 
 ---
 
 ## Gap Analysis Summary
 
-| Spec Section | Feature | Status |
-|--------------|---------|--------|
-| 13 | Data Persistence (SQLite schema) | ⚠️ Partial |
-| 2 | Escalation Chain Engine | ⚠️ Partial |
-| 3 | Reminder Parsing | ⚠️ Partial |
-| 10 | Voice Personality | ⚠️ Partial |
-| 11 | History & Stats | ⚠️ Partial |
-| 4 | Voice & TTS Generation | ❌ Missing |
-| 5 | Notification & Alarm Behavior | ❌ Missing |
-| 6 | Background Scheduling | ❌ Missing |
-| 7 | Calendar Integration | ❌ Missing |
-| 8 | Location Awareness | ❌ Missing |
-| 9 | Snooze & Dismissal Flow | ❌ Missing |
-| 12 | Sound Library | ❌ Missing |
-| 14 | Tests | ❌ Missing |
-| - | Harness Infrastructure | ❌ Missing |
-| - | Mobile App UI | ❌ Missing |
+| Spec Section | Feature | Code Status | Test Scenarios |
+|--------------|---------|-------------|----------------|
+| 13 | Data Persistence (SQLite schema) | ⚠️ Partial | 2 scenarios |
+| 2 | Escalation Chain Engine | ⚠️ Partial (bugs) | 4 scenarios |
+| 3 | Reminder Parsing | ⚠️ Partial | 3 scenarios |
+| 10 | Voice Personality | ⚠️ Partial (no variations) | 3 scenarios |
+| 11 | History & Stats | ⚠️ Partial | 3 scenarios |
+| 4 | Voice & TTS Generation | ❌ Missing | 0 scenarios |
+| 5 | Notification & Alarm Behavior | ❌ Missing | 0 scenarios |
+| 6 | Background Scheduling | ❌ Missing | 0 scenarios |
+| 7 | Calendar Integration | ❌ Missing | 0 scenarios |
+| 8 | Location Awareness | ❌ Missing | 0 scenarios |
+| 9 | Snooze & Dismissal Flow | ❌ Missing | 0 scenarios |
+| 12 | Sound Library | ❌ Missing | 0 scenarios |
+| - | Harness Infrastructure | ❌ Missing | 16 scenarios exist |
+| - | Mobile App UI | ❌ Missing | 0 scenarios |
 
 ---
 
@@ -34,69 +33,108 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 
 ### Phase 1: Foundation (Data & Core Logic)
 
-#### 1.1 [HIGH] Complete SQLite Schema
+#### 1.1 [CRITICAL] Create Harness Infrastructure
+**Required before any testing can occur**
+
+**Current state:** `harness/` directory is empty
+
+**Tasks:**
+- [ ] Create `harness/scenario_harness.py` - main harness entry point
+- [ ] Create `harness/lib/scenario_loader.py` - YAML scenario loader
+- [ ] Create `harness/lib/http_client.py` - HTTP client for API testing
+- [ ] Create `harness/lib/db_checker.py` - SQLite assertion checker
+- [ ] Create `harness/lib/llm_judge.py` - LLM-based assertion judge
+- [ ] Create `harness/lib/assertions.py` - assertion types (http_status, db_record, llm_judge)
+- [ ] Add CLI argument parsing (`--project`, `--scenario-dir`, `--verbose`)
+- [ ] Add test runner with pass/fail reporting
+- [ ] Add scenario metadata parsing
+
+---
+
+#### 1.2 [HIGH] Complete SQLite Schema
 **Spec:** Section 13 (Data Persistence)
 
-**Missing from current `src/test_server.py`:**
-- `origin_lat`, `origin_lng`, `origin_address` in reminders table
-- `calendar_event_id` in reminders
-- `tts_fallback` boolean in anchors
-- `snoozed_to` timestamp in anchors
-- `actual_arrival` in history
-- `missed_reason` in history
-- `updated_at` in destination_adjustments
-- `custom_sounds` table
-- `calendar_sync` table
-- `user_preferences` key/value table
+**Current gaps in `src/test_server.py`:**
+- Missing `origin_lat`, `origin_lng`, `origin_address` in reminders
+- Missing `calendar_event_id` in reminders
+- Missing `tts_fallback` boolean in anchors
+- Missing `snoozed_to` timestamp in anchors
+- Missing `actual_arrival` in history
+- Missing `missed_reason` in history
+- Missing `updated_at` in destination_adjustments
+- Missing `custom_sounds` table
+- Missing `calendar_sync` table
+- Missing migration versioning
 
 **Tasks:**
-- [ ] Create `src/lib/database/migrations.py` for versioned migrations
 - [ ] Add missing columns to reminders table
-- [ ] Add missing fields to anchors table
+- [ ] Add missing fields to anchors table  
 - [ ] Add missing fields to history table
+- [ ] Add destination_adjustments.updated_at
 - [ ] Create custom_sounds table
 - [ ] Create calendar_sync table
+- [ ] Create migrations.py with versioned migrations
 - [ ] Enable foreign keys and WAL mode
-- [ ] Create `src/lib/database/queries.py` with all CRUD operations
+- [ ] Fix existing scenarios: reminder-creation-crud.yaml, reminder-creation-cascade-delete.yaml
+
+**Existing test scenarios to update:**
+- `scenarios/reminder-creation-crud.yaml`
+- `scenarios/reminder-creation-cascade-delete.yaml`
 
 ---
 
-#### 1.2 [HIGH] Complete Escalation Chain Engine
+#### 1.3 [HIGH] Fix Escalation Chain Engine
 **Spec:** Section 2 (Escalation Chain Engine)
 
-**Current gaps:**
-- Compressed chain logic for 10-24 min buffers is incorrect
-- Missing `get_next_unfired_anchor()` function
-- Anchors not sorted by timestamp in DB
-- Missing retry/fire_count logic
+**Current bugs:**
+1. Compressed chain logic is incorrect - spec says:
+   - buffer ≥25 min: 8 anchors (calm, casual, pointed, urgent, pushing, firm, critical, alarm)
+   - buffer 10-24 min: compressed (start at urgent) - **currently wrong**
+   - buffer 5-9 min: firm, critical, alarm
+   - buffer ≤5 min: minimum (firm, critical, alarm)
+2. Missing `get_next_unfired_anchor()` function
+3. Anchors not consistently sorted by timestamp
 
 **Tasks:**
-- [ ] Fix compressed chain logic (buffer 10-24: urgent, pushing, firm, critical, alarm)
+- [ ] Fix compressed chain logic: buffer 10-24 min should be (urgent, pushing, firm, critical, alarm)
+- [ ] Fix compressed chain logic: buffer 20-24 min should include pushing tier
 - [ ] Implement `get_next_unfired_anchor(reminder_id)` function
 - [ ] Ensure anchors are sorted by timestamp
-- [ ] Implement fire_count increment logic
-- [ ] Add unit tests for TC-01 through TC-06
+- [ ] Add fire_count increment logic
+- [ ] Update existing scenarios with correct assertions
+
+**Existing test scenarios:**
+- `scenarios/chain-full-30min.yaml` (TC-01)
+- `scenarios/chain-compressed-15min.yaml` (TC-02)
+- `scenarios/chain-minimum-3min.yaml` (TC-03)
+- `scenarios/chain-invalid-rejected.yaml` (TC-04)
 
 ---
 
-#### 1.3 [HIGH] Complete Reminder Parser
+#### 1.4 [HIGH] Complete Reminder Parser
 **Spec:** Section 3 (Reminder Parsing & Creation)
 
 **Current gaps:**
 - Limited keyword extraction patterns
 - No LLM adapter interface
-- No mock LLM adapter
-- No confidence scoring display
+- No mock LLM adapter for testing
+- Missing "tomorrow" date resolution (partially done)
+- Missing reminder_type enum handling (simple_countdown)
 
 **Tasks:**
 - [ ] Create `src/lib/parsing/llm_adapter.py` interface
 - [ ] Create `src/lib/parsing/mock_llm_adapter.py` for testing
-- [ ] Create `src/lib/parsing/keyword_extractor.py` with enhanced patterns:
+- [ ] Enhance `src/lib/parsing/keyword_extractor.py`:
   - "X min drive", "X-minute drive", "in X minutes", "arrive at X", "check-in at X"
-  - "tomorrow", relative time handling
   - "dryer in 3 min" → simple_countdown
-- [ ] Create `src/lib/parsing/parser.py` unified adapter with fallback
+  - Better destination extraction
+- [ ] Add "tomorrow" date resolution (already in test_server.py, verify correctness)
 - [ ] Add unit tests for TC-01 through TC-07
+
+**Existing test scenarios:**
+- `scenarios/parse-natural-language.yaml` (TC-01)
+- `scenarios/parse-simple-countdown.yaml` (TC-02)
+- `scenarios/parse-tomorrow.yaml` (TC-03)
 
 ---
 
@@ -105,12 +143,7 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 #### 2.1 [HIGH] Voice & TTS Generation
 **Spec:** Section 4 (Voice & TTS Generation)
 
-**Current gaps:**
-- No TTS adapter interface
-- No mock TTS adapter
-- No /tts_cache/ directory handling
-- No actual ElevenLabs API integration
-- No cache invalidation on delete
+**Current state:** Only basic message templates exist, no actual TTS
 
 **Tasks:**
 - [ ] Create `src/lib/voice/tts_adapter.py` interface (ITTSAdapter)
@@ -118,6 +151,7 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 - [ ] Create `src/lib/voice/elevenlabs_adapter.py` for real API
 - [ ] Create `src/lib/voice/cache_manager.py` for /tts_cache/
 - [ ] Implement TTS cache invalidation on reminder delete
+- [ ] Add `/tts/generate` endpoint to test_server.py
 - [ ] Add unit tests for TC-01 through TC-05
 
 ---
@@ -129,7 +163,6 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 - Only basic templates, no variations (need 3+ per tier)
 - No custom personality prompt handling
 - No personality storage in preferences
-- No message generation with context
 
 **Tasks:**
 - [ ] Create `src/lib/voice/personality.py` with 5 built-in personalities
@@ -137,19 +170,20 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 - [ ] Create `src/lib/voice/message_generator.py` with variation selection
 - [ ] Add custom personality prompt handling (max 200 chars)
 - [ ] Create `src/lib/voice/personality_preferences.py` storage
+- [ ] Add `/voice/message` endpoint with variation support
 - [ ] Add unit tests for TC-01 through TC-05
+
+**Existing test scenarios:**
+- `scenarios/voice-coach-personality.yaml` (TC-01)
+- `scenarios/voice-no-nonsense.yaml` (TC-02)
+- `scenarios/voice-all-personalities.yaml`
 
 ---
 
 #### 2.3 [MEDIUM] Notification & Alarm Behavior
 **Spec:** Section 5 (Notification & Alarm Behavior)
 
-**Current gaps:**
-- No DND handling
-- No quiet hours
-- No chain overlap serialization
-- No TTS + notification sound tier escalation
-- No T-0 alarm looping
+**Current state:** Not implemented
 
 **Tasks:**
 - [ ] Create `src/lib/notifications/tier_escalation.py`
@@ -166,11 +200,7 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 #### 3.1 [HIGH] Background Scheduling
 **Spec:** Section 6 (Background Scheduling & Reliability)
 
-**Current gaps:**
-- No Notifee integration
-- No BGAppRefreshTask/BGProcessingTask handlers
-- No recovery scan on launch
-- No pending anchor re-registration
+**Current state:** Not implemented
 
 **Tasks:**
 - [ ] Create `src/lib/scheduling/notifee_client.py`
@@ -186,11 +216,7 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 #### 3.2 [MEDIUM] Calendar Integration
 **Spec:** Section 7 (Calendar Integration)
 
-**Current gaps:**
-- No Apple Calendar adapter (EventKit)
-- No Google Calendar adapter
-- No calendar sync scheduler
-- No permission handling
+**Current state:** Not implemented
 
 **Tasks:**
 - [ ] Create `src/lib/calendar/icalendar_adapter.py` interface
@@ -205,11 +231,7 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 #### 3.3 [MEDIUM] Location Awareness
 **Spec:** Section 8 (Location Awareness)
 
-**Current gaps:**
-- No CoreLocation/FusedLocationProvider integration
-- No 500m geofence check
-- No "LEAVE NOW" escalation logic
-- No location permission request flow
+**Current state:** Not implemented
 
 **Tasks:**
 - [ ] Create `src/lib/location/location_adapter.py` interface
@@ -227,12 +249,7 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 #### 4.1 [HIGH] Snooze & Dismissal Flow
 **Spec:** Section 9 (Snooze & Dismissal Flow)
 
-**Current gaps:**
-- No tap/tap-and-hold snooze handlers
-- No chain re-computation after snooze
-- No Notifee re-registration after snooze
-- No dismissal feedback flow
-- No departure estimate adjustment
+**Current state:** Not implemented
 
 **Tasks:**
 - [ ] Create `src/lib/interaction/snooze_handler.py` (tap = 1 min, tap-hold = custom)
@@ -240,6 +257,7 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 - [ ] Create `src/lib/interaction/dismissal_feedback.py`
 - [ ] Create `src/lib/interaction/feedback_storage.py`
 - [ ] Implement departure estimate adjustment (+2 min per "left_too_late", cap +15)
+- [ ] Add `/snooze` and `/dismiss` endpoints to test_server.py
 - [ ] Add unit tests for TC-01 through TC-06
 
 ---
@@ -247,11 +265,7 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 #### 4.2 [MEDIUM] Sound Library
 **Spec:** Section 12 (Sound Library)
 
-**Current gaps:**
-- No built-in sounds
-- No custom sound import
-- No sound picker
-- No fallback for corrupted sounds
+**Current state:** Not implemented
 
 **Tasks:**
 - [ ] Create `src/lib/sounds/built_in_sounds.py` (5 per category)
@@ -266,17 +280,25 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 **Spec:** Section 11 (History, Stats & Feedback Loop)
 
 **Current gaps:**
-- Incomplete hit_rate (trailing 7 days)
+- Hit rate calculation incomplete (needs trailing 7 days)
 - No streak counter
 - No common miss window
 - No 90-day retention/archival
+- Missing `actual_arrival`, `missed_reason` in history
 
 **Tasks:**
 - [ ] Complete hit_rate calculation: `count(hit) / count(outcome != 'pending') * 100`
 - [ ] Create `src/lib/stats/streak_counter.py`
 - [ ] Create `src/lib/stats/common_miss_window.py`
 - [ ] Create `src/lib/stats/archival.py` (90-day retention)
+- [ ] Add `/stats/streak` endpoint
+- [ ] Add `/stats/common-miss-window` endpoint
 - [ ] Add unit tests for TC-01 through TC-07
+
+**Existing test scenarios:**
+- `scenarios/history-record-outcome.yaml`
+- `scenarios/history-record-miss-feedback.yaml`
+- `scenarios/stats-hit-rate.yaml`
 
 ---
 
@@ -286,7 +308,7 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 **Spec:** Mobile app requirements
 
 **Tasks:**
-- [ ] Initialize React Native project (or Flutter if preferred)
+- [ ] Initialize React Native project
 - [ ] Set up navigation (Stack + Tab)
 - [ ] Create SQLite integration (react-native-sqlite-storage)
 - [ ] Set up Notifee integration
@@ -307,77 +329,42 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 
 ---
 
-### Phase 6: Testing & Validation
-
-#### 6.1 [HIGH] Unit Tests
-**Tasks:**
-- [ ] Chain engine determinism tests
-- [ ] Parser fixture tests
-- [ ] TTS adapter mock tests
-- [ ] LLM adapter mock tests
-- [ ] Keyword extraction tests
-- [ ] Schema validation tests
-
----
-
-#### 6.2 [MEDIUM] Integration Tests
-**Tasks:**
-- [ ] Full reminder creation flow (parse → chain → TTS → persist)
-- [ ] Anchor firing flow (schedule → fire → mark fired)
-- [ ] Snooze recovery flow (snooze → recompute → re-register)
-- [ ] Feedback loop flow (dismiss → feedback → adjustment)
-
----
-
-#### 6.3 [HIGH] Harness Infrastructure
-**Tasks:**
-- [ ] Create `harness/scenario_harness.py` (see AGENTS.md)
-- [ ] Create scenario YAML format
-- [ ] Create harness validation tests
-- [ ] Document harness usage in README
-
----
-
 ## Dependency Graph
 
 ```
 Phase 1: Foundation
-├── 1.1 SQLite Schema (blocking everything)
-├── 1.2 Chain Engine (blocks 2.1, 4.1)
-└── 1.3 Parser (blocks 2.1)
+├── 1.1 Harness Infrastructure (unblocks ALL testing)
+├── 1.2 SQLite Schema (blocking everything else)
+├── 1.3 Chain Engine (blocks 2.1, 4.1)
+└── 1.4 Parser (blocks 2.1)
 
 Phase 2: Voice & Notifications
-├── 2.1 TTS Generation (depends on 1.1, 1.3)
-├── 2.2 Voice Personality (depends on 1.1)
+├── 2.1 TTS Generation (depends on 1.2, 1.4)
+├── 2.2 Voice Personality (depends on 1.2)
 └── 2.3 Notification Behavior (depends on 2.1)
 
 Phase 3: Background & External
-├── 3.1 Background Scheduling (depends on 1.1, 1.2)
-├── 3.2 Calendar Integration (depends on 1.1)
-└── 3.3 Location Awareness (depends on 1.1)
+├── 3.1 Background Scheduling (depends on 1.2, 1.3)
+├── 3.2 Calendar Integration (depends on 1.2)
+└── 3.3 Location Awareness (depends on 1.2)
 
 Phase 4: User Interaction
-├── 4.1 Snooze & Dismissal (depends on 3.1)
-├── 4.2 Sound Library (depends on 1.1)
-└── 4.3 History & Stats (depends on 1.1, 4.1)
+├── 4.1 Snooze & Dismissal (depends on 1.1, 1.3)
+├── 4.2 Sound Library (depends on 1.2)
+└── 4.3 History & Stats (depends on 1.2, 4.1)
 
 Phase 5: Mobile App
-└── 5.1 App Structure (depends on 1.1, 2.1, 2.2, 2.3, 3.1)
-
-Phase 6: Testing
-├── 6.1 Unit Tests (depends on all Phase 1-4 features)
-├── 6.2 Integration Tests (depends on 6.1)
-└── 6.3 Harness (independent, can run early)
+└── 5.1 App Structure (depends on all Phase 1-4 features)
 ```
 
 ---
 
 ## Quick Wins (Can Start Immediately)
 
-1. **Add unit tests to existing chain engine** - Test determinism, compressed chains
-2. **Enhance keyword extractor** - More patterns for natural language
+1. **Create harness infrastructure** - `harness/scenario_harness.py` - unblocks all testing
+2. **Fix chain engine bugs** - compressed chain logic is incorrect
 3. **Add message variations** - 3+ per tier per personality
-4. **Create harness infrastructure** - `harness/scenario_harness.py`
+4. **Enhance keyword extractor** - more patterns for natural language
 
 ---
 
@@ -454,19 +441,30 @@ src/
 harness/
 ├── __init__.py
 ├── scenario_harness.py
-└── scenarios/
-    ├── chain_engine_test.yaml
-    ├── parser_test.yaml
-    └── ...
-tests/
-├── unit/
-│   ├── test_chain_engine.py
-│   ├── test_parser.py
-│   ├── test_tts.py
-│   └── ...
-└── integration/
-    ├── test_reminder_creation.py
-    └── ...
+└── lib/
+    ├── __init__.py
+    ├── scenario_loader.py
+    ├── http_client.py
+    ├── db_checker.py
+    ├── llm_judge.py
+    └── assertions.py
+scenarios/
+├── chain-full-30min.yaml          # Section 2, TC-01
+├── chain-compressed-15min.yaml    # Section 2, TC-02
+├── chain-minimum-3min.yaml        # Section 2, TC-03
+├── chain-invalid-rejected.yaml    # Section 2, TC-04
+├── parse-natural-language.yaml    # Section 3, TC-01
+├── parse-simple-countdown.yaml    # Section 3, TC-02
+├── parse-tomorrow.yaml            # Section 3, TC-03
+├── voice-coach-personality.yaml    # Section 10, TC-01
+├── voice-no-nonsense.yaml         # Section 10, TC-02
+├── voice-all-personalities.yaml   # Section 10
+├── history-record-outcome.yaml   # Section 11
+├── history-record-miss-feedback.yaml  # Section 11, TC-05
+├── stats-hit-rate.yaml            # Section 11, TC-01
+├── reminder-creation-crud.yaml    # Section 13
+├── reminder-creation-cascade-delete.yaml  # Section 13, TC-03
+└── README.md
 ```
 
 ---
@@ -474,7 +472,8 @@ tests/
 ## Notes
 
 - The spec is comprehensive and well-structured. Follow the test scenarios (TC-01, etc.) as acceptance criteria.
-- Every feature should have a corresponding test.
+- Every feature should have a corresponding test scenario.
 - Use interfaces (e.g., `ILanguageModelAdapter`, `ITTSAdapter`) for mock-ability.
 - All timestamps in ISO 8601 format (UTC internally, displayed in local time).
 - Foreign keys enabled, WAL mode for SQLite.
+- **CRITICAL:** The harness infrastructure (Phase 1.1) must be built first to enable any testing.
