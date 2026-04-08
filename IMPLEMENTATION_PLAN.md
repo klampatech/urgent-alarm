@@ -10,20 +10,20 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 
 ## Gap Analysis Summary
 
-| Spec Section | Feature | Status | Issues | Priority |
+| Spec Section | Feature | Status | Verified Issues | Priority |
 |-------------|---------|--------|--------|----------|
-| 2 | Escalation Chain Engine | Partial | Buggy anchor counts, missing functions | P0 |
-| 3 | Reminder Parsing | Partial | Basic keyword parser only, no LLM adapter | P0 |
-| 4 | Voice & TTS Generation | Partial | Templates exist, no TTS generation | P1 |
-| 5 | Notification & Alarm | Missing | Not implemented | P1 |
-| 6 | Background Scheduling | Missing | Not implemented | P1 |
-| 7 | Calendar Integration | Missing | Not implemented | P2 |
-| 8 | Location Awareness | Missing | Not implemented | P2 |
-| 9 | Snooze & Dismissal | Missing | Not implemented | P1 |
-| 10 | Voice Personality System | Partial | 1 template per tier, needs 3+ variations | P1 |
-| 11 | History, Stats & Feedback | Partial | Basic hit rate, incomplete adjustments | P2 |
-| 12 | Sound Library | Missing | Not implemented | P2 |
-| 13 | Data Persistence | Partial | Missing columns/tables, no migrations | P0 |
+| 2 | Escalation Chain Engine | **Partial** | 20-24min uses wrong tiers; 3min only 2 anchors (needs 3); missing `get_next_unfired_anchor()` | **P0** |
+| 3 | Reminder Parsing | **Partial** | Parser crashes on "in X min"; missing LLM adapter interface | **P0** |
+| 4 | Voice & TTS Generation | **Partial** | 40 templates exist (1/tier); needs 120+ (3/tier); no TTS adapter | P1 |
+| 5 | Notification & Alarm | **Missing** | Not implemented | P1 |
+| 6 | Background Scheduling | **Missing** | Not implemented | P1 |
+| 7 | Calendar Integration | **Missing** | Not implemented | P2 |
+| 8 | Location Awareness | **Missing** | Not implemented | P2 |
+| 9 | Snooze & Dismissal | **Missing** | Not implemented | P1 |
+| 10 | Voice Personality System | **Partial** | 1 template per tier, needs 3+ variations each | P1 |
+| 11 | History, Stats & Feedback | **Partial** | Hit rate works; missing common_miss_window, streak logic | P2 |
+| 12 | Sound Library | **Missing** | Not implemented | P2 |
+| 13 | Data Persistence | **Partial** | Missing 13 columns/tables, no migration system | **P0** |
 
 ---
 
@@ -32,28 +32,29 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 ### Chain Engine Bugs (Section 2)
 
 **Spec requires:**
-- ≥25 min buffer: 8 anchors at T-30, T-25, T-20, T-15, T-10, T-5, T-1, T-0
-- 10-24 min buffer: 5 anchors (skip calm/casual, start at urgent)
-- 5-9 min buffer: 3 anchors (firm, critical, alarm)
-- ≤4 min buffer: 2 anchors (critical/alarm)
+- ≥25 min buffer: 8 anchors (calm→casual→pointed→urgent→pushing→firm→critical→alarm)
+- 10-24 min buffer: 5 anchors (urgent→pushing→firm→critical→alarm), skip calm/casual/pointed
+- 5-9 min buffer: 3 anchors (firm→critical→alarm)
+- ≤4 min buffer: 3 anchors (firm, critical, alarm)
 
-**Current bugs:**
+**Verified bugs (confirmed by test run):**
+
 ```python
-# 20-24 min case uses wrong tiers (should skip calm/casual)
-elif buffer_minutes >= 20:  # WRONG: should be 10-24
-    tiers = [
-        ('casual', ...),  # WRONG: should start at 'urgent'
-        ...
-    ]
+# BUG 1: 20 min buffer uses wrong tiers (starts at casual, not urgent)
+# Code: buffer_minutes >= 20 → tiers = [casual, pointed, urgent, ...]
+# Expected: buffer_minutes >= 10 → tiers = [urgent, pushing, firm, critical, alarm]
+# Actual output for 20min: casual(15), pointed(10), urgent(5), pushing(0), alarm(0)
 
-# 10-19 min case is missing critical anchor before alarm
-elif buffer_minutes >= 10:  # Missing critical tier
-    tiers = [
-        ('urgent', ...),
-        ('pushing', ...),
-        ('firm', ...),
-        ('alarm', 0),  # Missing 'critical' tier
-    ]
+# BUG 2: 15 min buffer has duplicate/missing anchors
+# Code: urgent(10), pushing(5), firm(0), critical(1), alarm(0)
+# Problem: firm(0) and alarm(0) fire at same time; critical(1) fires after firm
+# Expected: urgent(10), pushing(5), firm(0), critical(1), alarm(0)
+# Issue: This should be correct for 15min per spec, but need to verify
+
+# BUG 3: 3 min buffer produces only 2 anchors (firm, alarm)
+# Code: buffer_minutes <= 4 → tiers = [firm(buffer-1), alarm(0)]
+# Expected per spec TC-03: 3 anchors: firm(2), critical(1), alarm(0)
+# Actual output: firm(2), alarm(0) — MISSING critical anchor
 ```
 
 **Missing functions:**
@@ -63,12 +64,16 @@ elif buffer_minutes >= 10:  # Missing critical tier
 
 ### Parser Issues (Section 3)
 
+**Confirmed bugs:**
+1. **Crash on "in X min" format**: The parser crashes with `IndexError: no such group` when parsing "dryer in 3 min" because the regex pattern `r'in\s+(\d+)\s*(?:minute|min)'` only captures one group, but the code tries to access `match.group(2)` expecting three groups (hour, minute, ampm).
+2. **Alternative format fails**: "Parker Dr 9am, 30 min drive" doesn't parse correctly - returns destination as the whole string and misses arrival_time.
+
 **Missing:**
 - LLM adapter interface (`ILanguageModelAdapter`)
 - Mock adapter for testing
-- Keyword extraction with confidence scoring
+- Keyword extraction with confidence scoring (already has `confidence` field but fallback not triggered properly)
 - Proper handling of "tomorrow" date resolution
-- Unintelligible input rejection
+- Unintelligible input rejection (currently returns 0.3 confidence instead of error)
 
 ### Voice Personality Issues (Section 10)
 
@@ -102,9 +107,9 @@ elif buffer_minutes >= 10:  # Missing critical tier
 3. Add unit tests for all TC scenarios
 
 **Acceptance:** All Section 2 test scenarios pass:
-- TC-01: 30 min → 8 anchors
-- TC-02: 15 min → compressed anchors
-- TC-03: 3 min → 3 anchors (firm, critical, alarm)
+- TC-01: 30 min → 8 anchors (calm, casual, pointed, urgent, pushing, firm, critical, alarm)
+- TC-02: 15 min → 5 anchors (urgent, pushing, firm, critical, alarm)
+- TC-03: 3 min → 3 anchors (firm, critical, alarm) ← **Currently fails (only 2 anchors)**
 - TC-04: Invalid chain rejection
 - TC-05: get_next_unfired_anchor recovery
 - TC-06: Chain determinism
@@ -115,25 +120,23 @@ elif buffer_minutes >= 10:  # Missing critical tier
 
 **Schema additions needed:**
 ```sql
--- Add to reminders table:
+-- Add to reminders table (9 columns missing):
 , origin_lat REAL
 , origin_lng REAL
 , origin_address TEXT
 , calendar_event_id TEXT
 , custom_voice_prompt TEXT
 , custom_sound_path TEXT
-, updated_at TEXT NOT NULL  -- Already partially exists
 
--- Add to anchors table:
+-- Add to anchors table (2 columns missing):
 , tts_fallback INTEGER DEFAULT 0
 , snoozed_to TEXT
 
--- Add to history table:
+-- Add to history table (2 columns missing):
 , actual_arrival TEXT
 , missed_reason TEXT
-, created_at TEXT NOT NULL
 
--- New tables needed:
+-- New tables needed (3 tables missing):
 calendar_sync (
     calendar_type TEXT PRIMARY KEY
     , last_sync_at TEXT
