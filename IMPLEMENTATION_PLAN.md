@@ -2,41 +2,117 @@
 
 ## Overview
 
-The current codebase contains a basic HTTP test server (`src/test_server.py`) with partial implementations of core systems. The specification defines 13 major systems. This plan identifies all gaps and prioritizes tasks by dependencies.
+The current codebase contains a basic HTTP test server (`src/test_server.py`) with partial implementations of core systems. The specification defines 13 major systems. **Critical bugs found in chain engine** that must be fixed before proceeding.
 
 **Current State (as of 2026-04-08):**
-| Component | Location | Status |
-|-----------|----------|--------|
-| HTTP Test Server | `src/test_server.py` | ~650 lines, functional basic endpoints |
-| Chain Engine | `src/test_server.py` (lines 101-180) | Partial - basic computation, some edge cases not handled |
-| Keyword Parser | `src/test_server.py` (lines 183-270) | Partial - regex extraction, limited patterns |
-| Voice Templates | `src/test_server.py` (lines 273-380) | Partial - 1 variation per tier per personality |
-| Stats Calculator | `src/test_server.py` (lines 383-400) | Partial - basic hit rate |
-| DB Schema | `src/test_server.py` (lines 19-97) | Partial - basic tables, missing columns |
-| Test Harness | `harness/` | **EMPTY** - infrastructure not created yet |
-| Lib Modules | `src/lib/` | **EMPTY** - no module structure |
-| Scenarios | `scenarios/` | 15 YAML files ready (chain, parse, voice, history, stats) |
-| Tests | `tests/` | Does not exist |
+| Component | Location | Status | Notes |
+|-----------|----------|--------|-------|
+| HTTP Test Server | `src/test_server.py` | ~627 lines, 11 functions | Partial - has bugs |
+| Chain Engine | `src/test_server.py` lines 101-180 | ⚠️ **BUGGY** | Wrong anchor timestamps, duplicate times |
+| Keyword Parser | `src/test_server.py` lines 183-270 | ⚠️ Partial | Limited regex, missing edge cases |
+| Voice Templates | `src/test_server.py` lines 273-380 | ⚠️ Partial | 1 variation per tier, needs 3+ |
+| Stats Calculator | `src/test_server.py` lines 383-400 | ⚠️ Partial | Basic hit rate only |
+| DB Schema | `src/test_server.py` lines 19-97 | ⚠️ Partial | Missing columns, no FK enforcement |
+| Test Harness | `harness/` | ❌ **EMPTY** | BLOCKS all validation |
+| Lib Modules | `src/lib/` | ❌ **EMPTY** | No module structure |
+| Scenarios | `scenarios/` | 15 YAML files | Ready but cannot run |
+| Tests | `tests/` | ❌ **MISSING** | None exist |
+
+---
+
+## ⚠️ CRITICAL BUGS FOUND (Must Fix First)
+
+### Bug 1: Chain Engine Produces Wrong Timestamps
+
+**Severity:** Critical - Breaks core functionality
+
+**Issue:** The chain engine computes anchor timestamps incorrectly, producing duplicate times and wrong urgency tiers.
+
+**Examples:**
+```python
+# 10-min buffer - WRONG output:
+urgent: 08:55:00  (should be 08:50:00 - T-10)
+pushing: 09:00:00  (WRONG - arrival is T-0!)
+critical: 08:59:00
+alarm: 09:00:00    (duplicate timestamp with pushing!)
+
+# 3-min buffer - WRONG output (2 anchors):
+firm: 08:58:00, alarm: 09:00:00
+# MISSING critical anchor at 08:59:00
+
+# 6-min buffer - WRONG output (duplicate timestamp):
+firm: 08:55:00, critical: 08:55:00  (DUPLICATE!)
+```
+
+**Spec says (Section 2.4):**
+- 30-min buffer → 8 anchors: 8:30, 8:35, 8:40, 8:45, 8:50, 8:55, 8:59, 9:00 ✅ (works)
+- 10-min buffer → 4 anchors: 8:50, 8:55, 8:59, 9:00 ❌ (broken)
+- 3-min buffer → 3 anchors: 8:57, 8:59, 9:00 ❌ (missing critical)
+
+**Root Cause:** The anchor generation logic uses `drive_duration - X` but doesn't correctly handle compressed chains.
+
+**Fix Required:** Rewrite `compute_escalation_chain()` with correct anchor selection logic per spec Section 2.3.
 
 ---
 
 ## Priority 1: Foundation (Critical — All Other Work Depends On These)
 
-### 1.1 Complete Database Schema Migration System
+### 1.1 Fix Chain Engine Bugs
+**File to modify:** `src/test_server.py` (lines 101-180)
+
+**Spec Reference:** Section 2 — Escalation Chain Engine
+
+**Status:** ❌ **CRITICAL BUGS** - Wrong timestamps, missing anchors, duplicate timestamps
+
+**Current bugs:**
+- `drive_duration - X` formula produces wrong timestamps for compressed chains
+- Missing critical anchor for buffers ≤ 5 min
+- Duplicate timestamps for buffers 5-9 min
+- Violates `UNIQUE(reminder_id, timestamp)` DB constraint
+
+**Required fixes (per spec Section 2.3):**
+| Buffer Size | Anchors | Tiers | Example (30 min) |
+|-------------|---------|-------|------------------|
+| ≥25 min | 8 | calm, casual, pointed, urgent, pushing, firm, critical, alarm | Full chain |
+| 20-24 min | 7 | casual, pointed, urgent, pushing, firm, critical, alarm | Skip calm |
+| 10-19 min | 5 | urgent, pushing, firm, critical, alarm | Start at urgent |
+| 5-9 min | 3 | firm, critical, alarm | Minimum compressed |
+| 1-4 min | 3 | firm, critical, alarm | Very short |
+| 0 min | 1 | alarm | Immediate |
+
+**Tasks:**
+- [ ] Rewrite anchor selection logic using absolute minutes_before thresholds, not relative
+- [ ] Ensure no duplicate timestamps (critical for DB UNIQUE constraint)
+- [ ] Ensure minimum chain (≤5 min) produces 3 anchors: T-(buffer-1), T-1, T-0
+- [ ] Validate chain for 10-min buffer produces correct timestamps: T-10, T-5, T-1, T-0
+- [ ] Add unit tests verifying all buffer sizes produce correct anchor counts and timestamps
+- [ ] Ensure chain is deterministic (same inputs = same outputs)
+
+**Verification:**
+- [ ] `compute_escalation_chain(datetime(9am), 30)` produces 8 anchors with correct times
+- [ ] `compute_escalation_chain(datetime(9am), 10)` produces 4 anchors: 8:50, 8:55, 8:59, 9:00
+- [ ] `compute_escalation_chain(datetime(9am), 3)` produces 3 anchors: 8:57, 8:59, 9:00
+- [ ] No duplicate timestamps in any chain
+- [ ] All anchors sorted by timestamp ascending
+
+---
+
+### 1.2 Complete Database Schema Migration System
 **Files to create:** `src/lib/db/__init__.py`, `src/lib/db/connection.py`, `src/lib/db/migrations.py`
 
 **Spec Reference:** Section 13 — Data Persistence
 
-**Status:** ⚠️ Partial — basic tables exist, missing complete schema, migrations, and FK enforcement
+**Status:** ⚠️ Partial — basic tables exist, missing complete schema and FK enforcement
 
 **Gaps in Current Code:**
 - Missing `calendar_sync` table
 - Missing `custom_sounds` table
-- Missing columns on `reminders`: `origin_lat`, `origin_lng`, `origin_address`, `calendar_event_id`, `custom_sound_path`
+- Missing columns on `reminders`: `origin_lat`, `origin_lng`, `origin_address`, `calendar_event_id`, `custom_sound_path`, `tts_cache_dir`
 - Missing columns on `anchors`: `tts_fallback`, `snoozed_to`
 - Missing columns on `history`: `actual_arrival`, `missed_reason`
 - No migration versioning system
 - No WAL mode, no FK enforcement
+- `reminders.drive_duration` stored as INTEGER but should track original vs adjusted duration separately
 
 **Tasks:**
 - [ ] Create `schema_version` tracking table
@@ -45,56 +121,66 @@ The current codebase contains a basic HTTP test server (`src/test_server.py`) wi
 - [ ] Enable `PRAGMA foreign_keys = ON` and `PRAGMA journal_mode = WAL`
 - [ ] Ensure cascade deletes work correctly (`ON DELETE CASCADE`)
 - [ ] Create `DatabaseConnection` class with `getInMemoryInstance()` for tests
-- [ ] All timestamps stored in ISO 8601 format (UTC internally)
+- [ ] All timestamps stored in ISO 8601 format (UTC internally, displayed in local time)
 - [ ] Generate UUID v4 for all primary keys
+- [ ] Add `destination_adjustments` table for feedback loop
 
 **Verification:**
-- [ ] Fresh install applies all migrations in order
+- [ ] Fresh install applies all migrations in order, schema is current
 - [ ] In-memory test database starts empty with all migrations applied
 - [ ] `reminders.id` is always a valid UUID v4
 - [ ] Deleting a reminder cascades to delete its anchors
+- [ ] Foreign key violation returns error without crashing
 
 ---
 
-### 1.2 Test Harness Infrastructure
-**Files to create:** `harness/scenario_harness.py`, `harness/fixtures/`
+### 1.3 Test Harness Infrastructure (BLOCKING)
+**Files to create:** `harness/scenario_harness.py`, `harness/__init__.py`
 
 **Spec Reference:** Section 14 — Definition of Done
 
-**Status:** ❌ **CRITICAL GAP** — harness directory is empty, this blocks all validation
+**Status:** ❌ **CRITICAL GAP** — harness directory is empty, blocks ALL validation
 
 **Gaps:**
-- No scenario runner exists (scenario_harness.py does not exist)
+- No scenario runner exists (`scenario_harness.py` does not exist)
 - No test database setup
 - No mock fixtures for LLM/TTS
 - No assertion validators (http_status, db_record, llm_judge)
 - 15 scenarios in `scenarios/` cannot be executed
+- **Otto loop requirement:** Must write `{"pass": true/false}` to `/tmp/ralph-scenario-result.json`
+
+**Required by Otto Loop:**
+- Harness runs after each `git push` via: `sudo python3 harness/scenario_harness.py --project $(basename "$(git rev-parse --show-toplevel)")"`
+- Harness must read scenarios from `/var/otto-scenarios/[project]/`
+- Harness must write results to `/tmp/ralph-scenario-result.json`
+- Scenario directory has `chmod 700` permissions (root only access)
 
 **Tasks:**
-- [ ] Create `ScenarioHarness` class that loads YAML scenarios from `scenarios/` directory
+- [ ] Create `ScenarioHarness` class that loads YAML scenarios
 - [ ] Implement scenario step executor (HTTP API calls to test_server.py)
 - [ ] Implement assertion validators:
   - `http_status` - validate HTTP status codes
-  - `db_record` - validate database records exist with conditions
+  - `db_record` - validate database records exist with conditions  
   - `llm_judge` - call LLM to evaluate output quality
 - [ ] Create `MockLanguageModelAdapter` for test fixtures
 - [ ] Create `MockTTSAdapter` for test fixtures (writes silent audio file)
 - [ ] Create `getInMemoryDatabase()` helper that resets between scenarios
 - [ ] Write result to `/tmp/ralph-scenario-result.json` after run
-- [ ] Support running single scenario or all scenarios
+- [ ] Support running single scenario or all scenarios from `/var/otto-scenarios/`
 - [ ] Report pass/fail per assertion and overall scenario
 
 **Verification:**
 - [ ] `python3 -m pytest harness/` runs successfully (when tests exist)
 - [ ] `python3 -m py_compile harness/scenario_harness.py src/test_server.py` passes
 - [ ] All 15 scenarios in `scenarios/` execute without error
+- [ ] `/tmp/ralph-scenario-result.json` contains valid JSON with pass/fail
 
 ---
 
-### 1.3 Refactor Monolithic test_server.py
+### 1.4 Refactor Monolithic test_server.py
 **Files to create:** `src/lib/__init__.py`, `src/lib/*/` modules
 
-**Status:** ⚠️ All code in single 650-line `test_server.py` — needs modularization
+**Status:** ⚠️ All code in single 627-line `test_server.py` — needs modularization
 
 **Tasks:**
 - [ ] Create `src/lib/__init__.py`
@@ -116,30 +202,18 @@ The current codebase contains a basic HTTP test server (`src/test_server.py`) wi
 ## Priority 2: Core Domain Logic
 
 ### 2.1 Chain Engine Completeness
-**File to create/modify:** `src/lib/chain/engine.py`
+**File to modify:** `src/lib/chain/engine.py`
 
 **Spec Reference:** Section 2 — Escalation Chain Engine
 
-**Status:** ⚠️ Partial — basic anchor computation exists (lines 101-165)
+**Status:** ⚠️ Partial — basic anchor computation exists, has bugs (see 1.1)
 
-**Gaps:**
-- No `get_next_unfired_anchor()` function
-- No TTS clip path tracking per anchor
-- No fire_count increment on retry
-- Chain not deterministic (depends on runtime clock in tests)
-- No validation that `arrival_time > departure + minimum_drive_time`
-
-**Tasks:**
-- [ ] Implement `compute_escalation_chain(arrival_time, drive_duration)` — deterministic, pure function
+**Tasks (after fixing bugs in 1.1):**
 - [ ] Implement `get_next_unfired_anchor(reminder_id)` query
-- [ ] Add `tts_clip_path`, `tts_fallback`, `fire_count`, `snoozed_to` to anchor storage
+- [ ] Add TTS clip path tracking per anchor
+- [ ] Add fire_count increment on retry
 - [ ] Add chain validation: reject if `drive_duration > time_to_arrival`
-- [ ] Handle compressed chains per spec:
-  - ≥25 min buffer: 8 anchors (full chain)
-  - 20-24 min: 7 anchors (skip calm)
-  - 10-19 min: 5 anchors (start at urgent)
-  - 5-9 min: 3 anchors (firm, critical, alarm)
-  - ≤5 min: 2 anchors (firm/alarm based on duration)
+- [ ] Handle compressed chains per spec (verify all buffer sizes)
 - [ ] Make chain computation pure (accept `now` as parameter for determinism)
 
 **Acceptance Criteria (Spec Section 2.4):**
@@ -161,7 +235,7 @@ The current codebase contains a basic HTTP test server (`src/test_server.py`) wi
 ---
 
 ### 2.2 LLM Adapter + Parser Enhancement
-**Files to create:** `src/lib/parser/`, split and enhance from `test_server.py` lines 167-250
+**Files to create/modify:** `src/lib/parser/`
 
 **Spec Reference:** Section 3 — Reminder Parsing & Creation
 
@@ -172,8 +246,14 @@ The current codebase contains a basic HTTP test server (`src/test_server.py`) wi
 - No MiniMax or Anthropic API implementation
 - No mock adapter for testing
 - Keyword extraction doesn't handle all spec formats
-- No confidence scoring
+- No confidence scoring per spec
 - No user confirmation flow
+- Missing reminder_type enum detection (countdown_event, simple_countdown, etc.)
+
+**Current parser issues:**
+- Doesn't detect "dryer in 3 min" as simple_countdown with arrival_time = now + 3min
+- Doesn't handle "tomorrow" date resolution correctly
+- Doesn't extract drive_duration from "Parker Dr 9am, 30 min drive" format well
 
 **Tasks:**
 - [ ] Create `ILanguageModelAdapter` abstract interface
@@ -189,12 +269,13 @@ The current codebase contains a basic HTTP test server (`src/test_server.py`) wi
 - [ ] Implement `parse_and_confirm()` returning parsed fields for UI review
 - [ ] Handle "tomorrow" date resolution correctly
 - [ ] Handle relative time ("in 3 minutes") vs absolute time ("at 9am")
+- [ ] Detect reminder_type enum based on input patterns
 
 **Acceptance Criteria (Spec Section 3.4):**
 - [ ] "30 minute drive to Parker Dr, check-in at 9am" parses correctly
-- [ ] "dryer in 3 min" parses as simple_countdown
+- [ ] "dryer in 3 min" parses as simple_countdown with arrival_time = now + 3 minutes
 - [ ] "meeting tomorrow 2pm, 20 min drive" parses with correct date
-- [ ] On API failure, keyword extraction produces best-effort parsed object
+- [ ] On API failure, keyword extraction produces best-effort parsed object with confidence < 1.0
 - [ ] User can edit any parsed field and confirm
 - [ ] Empty/unintelligible input returns user-facing error
 
@@ -486,13 +567,15 @@ The current codebase contains a basic HTTP test server (`src/test_server.py`) wi
 
 **Spec Reference:** Section 11 — History, Stats & Feedback Loop
 
-**Status:** ⚠️ Partial — basic hit rate exists (lines 352-370), missing features
+**Status:** ⚠️ Partial — basic hit rate exists, missing features
 
 **Gaps:**
 - No common miss window calculation
 - No streak counter for recurring reminders
 - No feedback loop adjustment (cap at +15 min)
 - No 90-day retention/archiving
+- No `actual_arrival` tracking (only `scheduled_arrival`)
+- No `missed_reason` tracking
 
 **Tasks:**
 - [ ] Implement hit rate: `count(outcome='hit') / count(outcome!='pending') * 100` for trailing 7 days
@@ -500,6 +583,8 @@ The current codebase contains a basic HTTP test server (`src/test_server.py`) wi
 - [ ] Implement common miss window: identify most frequently missed urgency tier
 - [ ] Implement streak counter: increment on 'hit' for recurring, reset to 0 on 'miss'
 - [ ] Implement 90-day retention: archive data older than 90 days
+- [ ] Track `actual_arrival` for hit rate accuracy
+- [ ] Track `missed_reason` (background_task_killed, dnd_suppressed, user_dismissed)
 
 **Acceptance Criteria (Spec Section 11.4):**
 - [ ] Weekly hit rate displays correctly: 4 hits and 1 miss = 80%
@@ -557,62 +642,42 @@ The current codebase contains a basic HTTP test server (`src/test_server.py`) wi
 
 ## 🚨 Critical Path (Start Here)
 
-**Before any other work, Priority 1 MUST be completed.**
+**Before any other work, Priority 1 MUST be completed in this order:**
 
 ```
 IMMEDIATE (Day 1):
-├── 1.2 Test Harness Infrastructure ← BLOCKING ALL VALIDATION
+├── 1.1 Fix Chain Engine Bugs ← CRITICAL (wrong timestamps, duplicates)
+│   └── Rewrites compute_escalation_chain() with correct logic
+│
+├── 1.3 Test Harness Infrastructure ← BLOCKING ALL VALIDATION
 │   └── 15 scenarios in scenarios/ cannot be executed
-└── 1.1 Database Schema + Migrations
-    └── All other features depend on correct DB schema
+│   └── Must write /tmp/ralph-scenario-result.json for Otto loop
+│
+└── 1.1 (completed) + 1.3 (completed)
         ↓
 DAY 2:
-└── 1.3 Refactor test_server.py → move logic to src/lib/
+└── 1.2 Database Schema + Migrations
+    └── All other features depend on correct DB schema
         ↓
-DAY 3+:
-├── 2.1 Chain Engine (complete)
-├── 2.2 LLM Adapter + Parser
+DAY 3:
+└── 1.4 Refactor test_server.py → move logic to src/lib/
+        ↓
+DAY 4+:
+├── 2.2 LLM Adapter + Parser (enhanced)
+├── 3.2 Voice Personality Variations
 └── Continue with remaining priorities...
 ```
 
-**Why 1.2 is blocking:** The `harness/` directory is empty. Without `scenario_harness.py`, there is NO WAY to run the 15 validation scenarios in `scenarios/`. This means you cannot verify ANY implementation.
+**Why 1.1 (Chain Engine) is CRITICAL:**
+- Current implementation produces WRONG timestamps and DUPLICATE times
+- Violates `UNIQUE(reminder_id, timestamp)` DB constraint
+- Causes data integrity failures
 
----
-
-## Implementation Order (Dependencies)
-
-```
-Priority 1: Foundation
-├── 1.2 Test Harness Infrastructure ← DO FIRST (blocking)
-├── 1.1 Database Schema + Migrations
-└── 1.3 Refactor Monolithic test_server.py
-        ↓
-Priority 2: Core Domain
-├── 2.1 Chain Engine (complete)
-└── 2.2 LLM Adapter + Parser (enhanced)
-        ↓
-Priority 3: Voice & TTS
-├── 3.1 TTS Adapter + Cache
-└── 3.2 Voice Personality Variations
-        ↓
-Priority 4-5: Notifications + Scheduling
-├── 4.1 Notification Tier System
-└── 5.1 Background Scheduling (Notifee stubs)
-        ↓
-Priority 6-7: Calendar + Location
-├── 6.1 Calendar Adapters
-└── 7.1 Location Check at Departure
-        ↓
-Priority 8: Snooze + Dismissal
-└── 8.1 Snooze + Dismissal Flow
-        ↓
-Priority 9-10: Stats + Sounds
-├── 9.1 History & Stats (enhanced)
-└── 10.1 Sound Library
-        ↓
-Priority 11: Tests
-└── 11.1 Full Test Suite
-```
+**Why 1.3 (Test Harness) is blocking:**
+- The `harness/` directory is empty
+- Without `scenario_harness.py`, there is NO WAY to run the 15 validation scenarios
+- Otto loop cannot validate any work without harness
+- Otto loop depends on `/tmp/ralph-scenario-result.json` written by harness
 
 ---
 
@@ -670,7 +735,8 @@ src/
         └── import_handler.py   # Custom audio import
 
 harness/
-├── scenario_harness.py          # Main test runner
+├── __init__.py
+├── scenario_harness.py         # Main test runner
 └── fixtures/
     ├── __init__.py
     ├── mock_llm.py             # Mock LLM responses
@@ -724,20 +790,21 @@ These tasks have minimal dependencies and can be started immediately:
 
 | Priority | Task | Status | Notes |
 |----------|------|--------|-------|
-| 1.1 | Database Schema + Migrations | ⚠️ Partial | Basic tables exist, missing columns/constraints |
-| **1.2** | **Test Harness Infrastructure** | ❌ **BLOCKING** | **Must be created first - 15 scenarios cannot run** |
-| 1.3 | Refactor Monolithic test_server.py | ⚠️ In single file | All logic in 650-line file |
-| 2.1 | Chain Engine Completeness | ⚠️ Partial | Missing edge cases and helper functions |
-| 2.2 | LLM Adapter + Parser Enhancement | ⚠️ Partial | Basic regex, needs LLM integration |
-| 3.1 | TTS Adapter + Cache | ❌ Not implemented | Message templates only, no audio |
-| 3.2 | Voice Personality Variations | ⚠️ 1 variation | Needs 3+ per tier per spec |
-| 4.1 | Notification Tier System | ❌ Not implemented | No sound tiers, DND, quiet hours |
-| 5.1 | Background Scheduling | ❌ Not implemented | No Notifee integration |
-| 6.1 | Calendar Adapters | ❌ Not implemented | No EventKit/Google Calendar |
-| 7.1 | Location Check at Departure | ❌ Not implemented | No location services |
-| 8.1 | Snooze + Dismissal Flow | ❌ Not implemented | No snooze/dismiss handlers |
-| 9.1 | History & Stats | ⚠️ Partial | Basic hit rate, missing feedback loop |
-| 10.1 | Sound Library | ❌ Not implemented | No sound categories or import |
+| **1.1** | **Fix Chain Engine Bugs** | ❌ **CRITICAL** | **Wrong timestamps, duplicates** |
+| 1.2 | Database Schema + Migrations | ⚠️ Partial | Basic tables exist, missing columns |
+| **1.3** | **Test Harness Infrastructure** | ❌ **BLOCKING** | **Must be created - Otto loop blocked** |
+| 1.4 | Refactor Monolithic test_server.py | ⚠️ In single file | All logic in 627-line file |
+| 2.1 | Chain Engine Completeness | ⚠️ Partial | Depends on 1.1 fix |
+| 2.2 | LLM Adapter + Parser Enhancement | ⚠️ Partial | Limited regex, needs LLM |
+| 3.1 | TTS Adapter + Cache | ❌ Not implemented | No audio generation |
+| 3.2 | Voice Personality Variations | ⚠️ 1 variation | Needs 3+ per spec |
+| 4.1 | Notification Tier System | ❌ Not implemented | No sound tiers, DND |
+| 5.1 | Background Scheduling | ❌ Not implemented | No Notifee |
+| 6.1 | Calendar Adapters | ❌ Not implemented | No EventKit |
+| 7.1 | Location Check at Departure | ❌ Not implemented | No location |
+| 8.1 | Snooze + Dismissal Flow | ⚠️ Partial | Basic firing only |
+| 9.1 | History & Stats | ⚠️ Partial | Missing feedback loop |
+| 10.1 | Sound Library | ❌ Not implemented | No sounds |
 
 ---
 
@@ -756,6 +823,8 @@ These require product decisions before implementation:
 ## Notes
 
 - The Python test server is a **reference implementation** for scenario testing. The actual React Native/Flutter app would implement these systems natively.
-- Priority 1 (Foundation) MUST be completed before any other work — all other components depend on the database schema.
+- Priority 1 (Foundation) MUST be completed before any other work — all other components depend on the database schema and correct chain computation.
+- **Chain engine bugs are CRITICAL** — they cause data integrity failures and must be fixed before any integration testing.
+- **Test harness is BLOCKING** — Otto loop cannot validate any work without it.
 - The 15 existing scenarios in `scenarios/` validate the current partial implementations. They should all pass once the corresponding systems are complete.
 - All tests must pass before a task can be marked complete (per Otto loop rules).
