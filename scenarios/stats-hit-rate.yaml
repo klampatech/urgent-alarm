@@ -1,0 +1,33 @@
+# Scenario: Stats - Hit Rate Calculation (TC-01)
+# Spec Section 11
+name: stats-hit-rate
+description: |
+  Calculate weekly hit rate from history records.
+  Should return percentage based on hit vs total resolved outcomes.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /history {
+        "reminder_id": "test-001",
+        "destination": "Test A",
+        "scheduled_arrival": "2026-04-07T10:00:00",
+        "outcome": "hit"
+      }
+    - POST /history {
+        "reminder_id": "test-002",
+        "destination": "Test B",
+        "scheduled_arrival": "2026-04-07T11:00:00",
+        "outcome": "hit"
+      }
+    - POST /history {
+        "reminder_id": "test-003",
+        "destination": "Test C",
+        "scheduled_arrival": "2026-04-07T12:00:00",
+        "outcome": "miss"
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /stats/hit-rate
+    expect: 200

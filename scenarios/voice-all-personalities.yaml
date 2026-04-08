@@ -1,0 +1,27 @@
+# Scenario: Voice - All Personalities Generate Messages
+# Spec Section 10
+name: voice-all-personalities
+description: |
+  Test that all 5 built-in voice personalities can generate messages.
+  Validates Coach, Assistant, Best Friend, No-nonsense, and Calm.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /voice/message {"personality": "coach", "urgency_tier": "urgent", "destination": "Test", "drive_duration": 30, "minutes_remaining": 5}
+    - POST /voice/message {"personality": "assistant", "urgency_tier": "urgent", "destination": "Test", "drive_duration": 30, "minutes_remaining": 5}
+    - POST /voice/message {"personality": "best_friend", "urgency_tier": "urgent", "destination": "Test", "drive_duration": 30, "minutes_remaining": 5}
+    - POST /voice/message {"personality": "no_nonsense", "urgency_tier": "urgent", "destination": "Test", "drive_duration": 30, "minutes_remaining": 5}
+    - POST /voice/message {"personality": "calm", "urgency_tier": "urgent", "destination": "Test", "drive_duration": 30, "minutes_remaining": 5}
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /voice/message
+    method: POST
+    body:
+      personality: "coach"
+      urgency_tier: "urgent"
+      destination: "Test"
+      drive_duration: 30
+      minutes_remaining: 5
+    expect: 200

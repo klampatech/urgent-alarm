@@ -1,0 +1,26 @@
+# Scenario: Chain Engine - Invalid Chain Rejection (TC-04)
+# Spec Section 2
+name: chain-invalid-rejected
+description: |
+  Chain validation rejects drive_duration that exceeds time to arrival.
+  Should return error code 400.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /reminders {
+        "destination": "Invalid trip",
+        "arrival_time": "2026-04-09T09:00:00",
+        "drive_duration": 120
+      }
+env:
+  base_url: http://localhost:8090
+  arrival: "2026-04-09T09:00:00"
+assertions:
+  - type: http_status
+    path: /reminders
+    method: POST
+    body:
+      destination: "Invalid trip"
+      arrival_time: "${arrival}"
+      drive_duration: 120
+    expect: 400

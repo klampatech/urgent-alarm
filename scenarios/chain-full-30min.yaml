@@ -1,0 +1,39 @@
+# Scenario: Chain Engine - Full 30 Minute Buffer (TC-01)
+# Spec Section 2, TC-01
+name: chain-full-30min-buffer
+description: |
+  Full escalation chain generation for a 30-minute drive buffer.
+  Validates that 8 anchors are created: departure, T-25, T-20, T-15, T-10, T-5, T-1, T-0.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /reminders {
+        "destination": "Parker Dr check-in",
+        "arrival_time": "2026-04-09T09:00:00",
+        "drive_duration": 30,
+        "voice_personality": "assistant"
+      }
+env:
+  base_url: http://localhost:8090
+  arrival: "2026-04-09T09:00:00"
+  expected_anchors: 8
+assertions:
+  - type: http_status
+    path: /reminders
+    method: POST
+    body:
+      destination: "Parker Dr check-in"
+      arrival_time: "${arrival}"
+      drive_duration: 30
+      voice_personality: "assistant"
+    expect: 201
+  - type: db_record
+    table: anchors
+    conditions:
+      fired: 0
+  - type: llm_judge
+    model: sonnet-4-20250514
+    prompt: |
+      The system created a reminder with 30 minute drive duration.
+      A full escalation chain should have been generated with 8 anchors.
+      Return PASS if the reminder was created successfully, FAIL otherwise.

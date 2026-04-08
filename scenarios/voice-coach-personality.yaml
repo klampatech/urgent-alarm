@@ -1,0 +1,35 @@
+# Scenario: Voice - Coach Personality Message (TC-01)
+# Spec Section 10
+name: voice-coach-personality
+description: |
+  Generate voice message using "Coach" personality at T-5 urgent tier.
+  Should produce motivating, exclamation-mark ending message.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /voice/message {
+        "personality": "coach",
+        "urgency_tier": "urgent",
+        "destination": "Parker Dr",
+        "drive_duration": 30,
+        "minutes_remaining": 5
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /voice/message
+    method: POST
+    body:
+      personality: "coach"
+      urgency_tier: "urgent"
+      destination: "Parker Dr"
+      drive_duration: 30
+      minutes_remaining: 5
+    expect: 200
+  - type: llm_judge
+    model: sonnet-4-20250514
+    prompt: |
+      Evaluate the generated voice message for Coach personality.
+      Expected: Motivational tone, contains "Parker Dr", contains urgency indicators.
+      Return PASS if message is motivating and urgent, FAIL otherwise.

@@ -1,0 +1,21 @@
+# Scenario: Parser - Tomorrow Date Resolution (TC-03)
+# Spec Section 3
+name: parse-tomorrow-date
+description: |
+  Parse "meeting tomorrow 2pm, 20 min drive"
+  Should resolve to next day's 2:00 PM.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /parse {
+        "text": "meeting tomorrow 2pm, 20 min drive"
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /parse
+    method: POST
+    body:
+      text: "meeting tomorrow 2pm, 20 min drive"
+    expect: 200

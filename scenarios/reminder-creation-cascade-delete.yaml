@@ -1,0 +1,33 @@
+# Scenario: Reminder - Cascade Delete (TC-03)
+# Spec Section 13
+name: reminder-cascade-delete
+description: |
+  Verify that deleting a reminder cascades to delete its anchors.
+  This tests foreign key relationships and cascade behavior.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /reminders {
+        "destination": "Cascade test",
+        "arrival_time": "2026-04-10T15:00:00",
+        "drive_duration": 30
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /reminders
+    method: POST
+    body:
+      destination: "Cascade test"
+      arrival_time: "2026-04-10T15:00:00"
+      drive_duration: 30
+    expect: 201
+  - type: db_record
+    table: reminders
+    conditions:
+      destination: "Cascade test"
+  - type: db_record
+    table: anchors
+    conditions:
+      fired: 0

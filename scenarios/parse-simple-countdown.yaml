@@ -1,0 +1,21 @@
+# Scenario: Parser - Simple Countdown (TC-02)
+# Spec Section 3
+name: parse-simple-countdown
+description: |
+  Parse simple countdown: "dryer in 3 min"
+  Should identify as simple_countdown type with 0 drive duration.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /parse {
+        "text": "dryer in 3 min"
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /parse
+    method: POST
+    body:
+      text: "dryer in 3 min"
+    expect: 200

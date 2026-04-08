@@ -1,0 +1,35 @@
+# Scenario: Voice - No-nonsense Personality Message (TC-02)
+# Spec Section 10
+name: voice-no-nonsense-personality
+description: |
+  Generate voice message using "No-nonsense" personality.
+  Should be brief, direct, no filler words.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /voice/message {
+        "personality": "no_nonsense",
+        "urgency_tier": "firm",
+        "destination": "Parker Dr",
+        "drive_duration": 30,
+        "minutes_remaining": 5
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /voice/message
+    method: POST
+    body:
+      personality: "no_nonsense"
+      urgency_tier: "firm"
+      destination: "Parker Dr"
+      drive_duration: 30
+      minutes_remaining: 5
+    expect: 200
+  - type: llm_judge
+    model: sonnet-4-20250514
+    prompt: |
+      Evaluate the generated voice message for No-nonsense personality.
+      Expected: Brief, direct, clipped, no exclamation marks or filler words.
+      Return PASS if message is brief and direct, FAIL otherwise.

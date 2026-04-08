@@ -1,0 +1,31 @@
+# Scenario: History - Record Outcome Hit (TC-01)
+# Spec Section 11
+name: history-record-hit
+description: |
+  Record a reminder outcome as 'hit' when user made it on time.
+  Should update destination_adjustments with hit count.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /history {
+        "reminder_id": "test-reminder-001",
+        "destination": "Parker Dr",
+        "scheduled_arrival": "2026-04-08T10:00:00",
+        "outcome": "hit"
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /history
+    method: POST
+    body:
+      reminder_id: "test-reminder-001"
+      destination: "Parker Dr"
+      scheduled_arrival: "2026-04-08T10:00:00"
+      outcome: "hit"
+    expect: 201
+  - type: db_record
+    table: history
+    conditions:
+      outcome: "hit"

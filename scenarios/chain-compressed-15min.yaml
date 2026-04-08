@@ -1,0 +1,31 @@
+# Scenario: Chain Engine - Compressed Buffer 10-24 min (TC-02, TC-03)
+# Spec Section 2
+name: chain-compressed-15min-buffer
+description: |
+  Compressed escalation chain for a 15-minute drive buffer.
+  Should skip calm/casual tiers and start at urgent tier.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /reminders {
+        "destination": "Quick errand",
+        "arrival_time": "2026-04-09T09:00:00",
+        "drive_duration": 15,
+        "voice_personality": "coach"
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /reminders
+    method: POST
+    body:
+      destination: "Quick errand"
+      arrival_time: "2026-04-09T09:00:00"
+      drive_duration: 15
+    expect: 201
+  - type: db_record
+    table: reminders
+    conditions:
+      destination: "Quick errand"
+      drive_duration: 15

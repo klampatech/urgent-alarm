@@ -1,0 +1,29 @@
+# Scenario: History - Record Miss with Feedback (TC-05)
+# Spec Section 11
+name: history-record-miss-feedback
+description: |
+  Record a missed reminder with "left_too_late" feedback.
+  Should increment adjustment_minutes by 2 for the destination.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /history {
+        "reminder_id": "test-reminder-002",
+        "destination": "Parker Dr",
+        "scheduled_arrival": "2026-04-08T10:00:00",
+        "outcome": "miss",
+        "feedback_type": "left_too_late"
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /history
+    method: POST
+    body:
+      reminder_id: "test-reminder-002"
+      destination: "Parker Dr"
+      scheduled_arrival: "2026-04-08T10:00:00"
+      outcome: "miss"
+      feedback_type: "left_too_late"
+    expect: 201

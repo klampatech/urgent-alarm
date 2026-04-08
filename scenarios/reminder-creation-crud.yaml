@@ -1,0 +1,32 @@
+# Scenario: Reminder - Full CRUD Workflow
+# Spec Sections 2, 3, 13
+name: reminder-full-crud
+description: |
+  Complete reminder workflow: create reminder with anchors, retrieve list,
+  verify anchors were created correctly.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /reminders {
+        "destination": "Full CRUD test",
+        "arrival_time": "2026-04-10T14:00:00",
+        "drive_duration": 25,
+        "voice_personality": "best_friend",
+        "reminder_type": "countdown_event"
+      }
+    - GET /reminders
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /reminders
+    method: POST
+    body:
+      destination: "Full CRUD test"
+      arrival_time: "2026-04-10T14:00:00"
+      drive_duration: 25
+      voice_personality: "best_friend"
+    expect: 201
+  - type: http_status
+    path: /reminders
+    expect: 200

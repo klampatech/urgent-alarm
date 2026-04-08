@@ -1,0 +1,28 @@
+# Scenario: Parser - Natural Language Full Parse (TC-01)
+# Spec Section 3
+name: parse-natural-language
+description: |
+  Parse full natural language input: "30 minute drive to Parker Dr, check-in at 9am"
+  Should extract destination, arrival_time, and drive_duration.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /parse {
+        "text": "30 minute drive to Parker Dr, check-in at 9am"
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /parse
+    method: POST
+    body:
+      text: "30 minute drive to Parker Dr, check-in at 9am"
+    expect: 200
+  - type: llm_judge
+    model: sonnet-4-20250514
+    prompt: |
+      Evaluate the parsed result from natural language input.
+      Input: "30 minute drive to Parker Dr, check-in at 9am"
+      Expected fields: destination contains "Parker Dr", drive_duration around 30, confidence >= 0.7
+      Return PASS if parsing was reasonable, FAIL otherwise.

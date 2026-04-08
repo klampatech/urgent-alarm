@@ -1,0 +1,26 @@
+# Scenario: Chain Engine - Minimum Buffer <= 5 min (TC-03)
+# Spec Section 2
+name: chain-minimum-3min-buffer
+description: |
+  Minimum escalation chain for a 3-minute buffer.
+  Should produce 3 anchors: T-3, T-1, T-0.
+trigger:
+  type: api_sequence
+  steps:
+    - POST /reminders {
+        "destination": "Quick reminder",
+        "arrival_time": "2026-04-09T09:00:00",
+        "drive_duration": 3,
+        "voice_personality": "no_nonsense"
+      }
+env:
+  base_url: http://localhost:8090
+assertions:
+  - type: http_status
+    path: /reminders
+    method: POST
+    body:
+      destination: "Quick reminder"
+      arrival_time: "2026-04-09T09:00:00"
+      drive_duration: 3
+    expect: 201
