@@ -7,18 +7,41 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Gap |
 |-------------|--------|-----|
-| 2. Escalation Chain Engine | Partial | Basic logic exists, needs unit tests and get_next_unfired_anchor |
-| 3. Reminder Parsing | Partial | Keyword fallback exists, needs LLM adapter, mock interface |
-| 4. Voice & TTS Generation | None | ElevenLabs integration, caching, mock interface needed |
+| 2. Escalation Chain Engine | Partial | Basic logic exists in test_server.py, missing `get_next_unfired_anchor`, unit tests, and spec-level tier ordering |
+| 3. Reminder Parsing | Partial | Keyword fallback exists in test_server.py, needs LLM adapter interface with mock |
+| 4. Voice & TTS Generation | Partial | Basic templates exist in test_server.py, missing TTS adapter interface, ElevenLabs integration, and caching |
 | 5. Notification & Alarm | None | DND, quiet hours, chain overlap, sound tiers not implemented |
 | 6. Background Scheduling | None | Notifee, BGTaskScheduler, recovery scan not implemented |
 | 7. Calendar Integration | None | EventKit, Google Calendar API not implemented |
 | 8. Location Awareness | None | CoreLocation single-check not implemented |
-| 9. Snooze & Dismissal | Partial | Basic history recording, needs full interaction flow |
-| 10. Voice Personality | Partial | Templates exist, needs custom prompt, message variations |
-| 11. History & Stats | Partial | Basic hit rate, needs feedback loop, common miss window |
+| 9. Snooze & Dismissal | Partial | Basic history recording in test_server.py, missing full interaction flow (tap/tap-hold/swipe), chain re-computation |
+| 10. Voice Personality | Partial | Basic templates exist (5 personalities), missing message variations (3 per tier), custom prompt support |
+| 11. History & Stats | Partial | Basic hit rate exists in test_server.py, missing feedback loop adjustment logic, streak counter, common miss window |
 | 12. Sound Library | None | Built-in sounds, custom import not implemented |
-| 13. Data Persistence | Partial | Basic schema, needs migrations, in-memory mode |
+| 13. Data Persistence | Partial | Basic schema in test_server.py, missing versioned migrations, in-memory test mode, full spec schema |
+
+### Current Implementation Status
+
+`src/test_server.py` provides a proof-of-concept with:
+- ✅ SQLite database with core tables (simplified schema)
+- ✅ Chain engine (`compute_escalation_chain`) - basic anchor generation
+- ✅ Keyword parser (`parse_reminder_natural`) - regex-based fallback
+- ✅ Voice personality templates (5 personalities, single message per tier)
+- ✅ Basic hit rate calculation
+- ✅ HTTP test endpoints
+
+Missing from current implementation:
+- ❌ `get_next_unfired_anchor` function for scheduler recovery
+- ❌ Unit tests for chain engine scenarios
+- ❌ LLM adapter interface (`ILanguageModelAdapter`)
+- ❌ Mock LLM adapter for tests
+- ❌ TTS adapter interface (`ITTSAdapter`)
+- ❌ Mock TTS adapter for tests
+- ❌ Message variations (3 per tier per personality)
+- ❌ Full stats service (streak, common miss window)
+- ❌ Snooze handler with chain re-computation
+- ❌ Versioned database migrations
+- ❌ Full spec schema (origin_lat/lng, calendar_event_id, custom_sounds, etc.)
 
 ---
 
