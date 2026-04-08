@@ -72,6 +72,11 @@
 - Missing anchor sorting guarantee
 - Missing `snoozed_to` field handling
 
+**⚠️ Known Bugs (must fix):**
+- 10-min buffer: pushing anchor fires at 9:00 (T-0) instead of 8:50 (T-10)
+- 3-min buffer: only produces 2 anchors instead of 3 (should be: 8:57 firm, 8:59 critical, 9:00 alarm)
+- Anchors are not consistently sorted by timestamp
+
 **Tasks:**
 - [ ] Create `src/lib/chain_engine.py` with:
   - `compute_escalation_chain(arrival_time, drive_duration)` with full compression rules
@@ -85,8 +90,10 @@
   - 15-19 min: 6 anchors (pointed → alarm)
   - 10-14 min: 5 anchors (urgent → alarm)
   - 5-9 min: 3 anchors (firm, critical, alarm)
-  - ≤5 min: 2 anchors (critical, alarm)
-- [ ] Ensure anchors are sorted by timestamp ascending
+  - ≤5 min: 3 anchors (firm, critical, alarm) per spec TC-03
+- [ ] **BUG FIX:** Ensure anchors are sorted by timestamp ascending
+- [ ] **BUG FIX:** Fix 10-min buffer to produce: 8:50 (pushing), 8:55 (urgent), 8:59 (critical), 9:00 (alarm)
+- [ ] **BUG FIX:** Fix 3-min buffer to produce 3 anchors: 8:57 (firm), 8:59 (critical), 9:00 (alarm)
 - [ ] Write unit tests for all test scenarios TC-01 through TC-06
 
 **Acceptance Criteria (Section 2.4):**
@@ -485,7 +492,37 @@
 
 ---
 
-### Task 5.2: Create Integration Tests
+### Task 5.2: Create Scenario Harness
+**Files to create:** `harness/scenario_harness.py`
+**Dependencies:** None (can run parallel with other tasks)
+**Priority:** P0
+**Spec Reference:** Validation framework
+
+**Tasks:**
+- [ ] Create `harness/scenario_harness.py` that:
+  - Reads scenario YAML files from configurable directory (`/var/otto-scenarios/{project}/`)
+  - Supports `api_sequence` trigger type with HTTP steps
+  - Executes HTTP requests against the test server
+  - Validates assertions:
+    - `http_status` - validates response status code
+    - `db_record` - queries SQLite directly
+    - `llm_judge` - calls configured LLM for judgment
+  - Reports PASS/FAIL for each scenario
+- [ ] Support environment variable: `OTTO_SCENARIO_DIR` for custom scenario directory
+- [ ] Command-line: `python3 harness/scenario_harness.py --project {project}`
+- [ ] Exit code 0 on all PASS, non-zero on any FAIL
+- [ ] Unit tests for harness core functionality
+
+**Acceptance Criteria:**
+- [ ] All 15 scenario YAML files in `scenarios/` execute successfully
+- [ ] HTTP status assertions work correctly
+- [ ] DB record assertions query SQLite correctly
+- [ ] LLM judge assertions call configured model
+- [ ] Exit code reflects overall test result
+
+---
+
+### Task 5.3: Create Integration Tests
 **Files to create:** `tests/` directory
 **Dependencies:** Tasks 1.1, 1.2, 1.3, 2.3, 3.1, 3.2, 3.3
 **Priority:** P1
@@ -535,7 +572,9 @@ Phase 4 (External Integration)
 Phase 5 (Refactoring & Testing)
 ├── Task 5.1: Refactor test_server.py
 │   └── depends on: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 3.2
-└── Task 5.2: Integration Tests
+├── Task 5.2: Create Scenario Harness
+│   └── depends on: none (can be parallel)
+└── Task 5.3: Integration Tests
     └── depends on: all above
 ```
 
@@ -608,10 +647,26 @@ Phase 5 (Refactoring & Testing)
 │   ├── urgent-voice-alarm-app-2026-04-08.md
 │   └── urgent-voice-alarm-app-2026-04-08.spec.md
 ├── harness/
-│   └── scenario_harness.py
+│   └── scenario_harness.py     # MISSING - Task 5.2
 ├── IMPLEMENTATION_PLAN.md       # This file
 └── AGENTS.md
 ```
+
+---
+
+## Critical Gaps Summary
+
+The following items are **MISSING** entirely and need to be created from scratch:
+
+| Item | Priority | Status |
+|------|----------|--------|
+| `harness/scenario_harness.py` | P0 | MISSING - core test infrastructure |
+| `src/lib/` directory & all modules | P1 | MISSING - all library code |
+| `tests/` directory | P1 | MISSING - unit tests |
+| Chain engine bug fixes | P1 | BUGS in compression logic |
+| LLM adapter interface | P1 | MISSING - required for testability |
+| TTS adapter interface | P2 | MISSING |
+| Calendar adapters | P3 | MISSING |
 
 ---
 
