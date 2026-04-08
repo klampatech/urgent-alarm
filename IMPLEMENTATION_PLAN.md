@@ -123,7 +123,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 > **Implementation notes:** Implemented interface in `src/backend/adapters/llm_adapter.py` with `ILanguageModelAdapter`, `ParsedReminder`, and `LLMParseError`. Created MiniMax adapter in `minimax_adapter.py` with env var configuration. Mock adapter in `mock_llm.py` returns predefined fixtures with keyword matching and fallback to basic parsing. Verified with import tests.
 
-#### 4. Reminder Parser Integration
+#### 4. Reminder Parser Integration ✅ COMPLETED
 **Spec Ref:** Section 3.3, 3.4, 3.5
 **Task:** Connect parser to reminder creation flow
 - Parse natural language input via LLM or fallback
@@ -132,6 +132,8 @@ This document maps the specification requirements to implementation tasks, prior
 - Extract: destination, arrival_time, drive_duration, reminder_type
 - **Acceptance Criteria:** All 7 test scenarios pass (TC-01 through TC-07)
 **Files:** `src/backend/services/reminder_parser.py`
+
+> **Implementation notes:** Implemented ReminderParser in `reminder_parser.py` that integrates LLM adapter with fallback to keyword parsing. get_confirmation_card() provides UI-ready display data. Verified with parse endpoint tests.
 
 ---
 
