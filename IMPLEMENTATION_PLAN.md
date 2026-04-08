@@ -58,7 +58,7 @@ Analysis of `specs/*.md` vs current `src/*.py` codebase reveals significant gaps
 | 20-24 min | 7 | casual, pointed, urgent, pushing, firm, critical, alarm |
 | 10-19 min | 5 | urgent, pushing, firm, critical, alarm |
 | 5-9 min | 3 | firm, critical, alarm |
-| 1-4 min | 3 | firm, critical, alarm |
+| 1-4 min | 2-3 | firm, critical, alarm |
 | 0 min | 1 | alarm |
 
 **Current Bugs (verified via code analysis):**
