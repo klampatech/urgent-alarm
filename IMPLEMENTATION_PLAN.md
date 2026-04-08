@@ -4,9 +4,18 @@
 
 The current codebase contains a basic HTTP test server (`src/test_server.py`) with partial implementations of core systems. The specification defines 13 major systems. **Critical bugs found in chain engine** that must be fixed before proceeding.
 
-**Gap Analysis Date:** 2026-04-08 (Updated)
+**Gap Analysis Date:** 2026-04-08 (Re-verified)
 
-**Analyzed By:** pi-coding-agent (re-analysis)
+**Analyzed By:** pi-coding-agent
+
+**Chain Engine Bugs Verified:** ✅ Confirmed via live test
+
+| Buffer | Expected | Actual | Status |
+|--------|----------|--------|--------|
+| 30 min | 8 anchors, T-30...T-0 | 8 anchors ✓ | ✅ Working |
+| 10 min | 4 anchors: T-10, T-5, T-1, T-0 | urgent@08:55 (should be T-10=08:50), pushing@09:00 (should be T-5=08:55) | ❌ BROKEN |
+| 3 min | 3 anchors: T-2, T-1, T-0 | 2 anchors only (missing critical) | ❌ BROKEN |
+| 6 min | 3 anchors, no duplicates | DUPLICATE T-5 timestamps (firm@08:55, critical@08:55) | ❌ BROKEN |
 
 ---
 
@@ -50,20 +59,20 @@ After thorough analysis of `specs/*.md` vs `src/*`:
 
 **Issue:** The chain engine computes anchor timestamps incorrectly, producing duplicate times and wrong urgency tiers.
 
-**Examples:**
+**Examples (live test output):**
 ```python
 # 10-min buffer - WRONG output:
-urgent: 08:55:00  (should be 08:50:00 - T-10)
-pushing: 09:00:00  (WRONG - arrival is T-0!)
-critical: 08:59:00
-alarm: 09:00:00    (duplicate timestamp with pushing!)
+urgent: 2026-04-09T08:55:00  (should be 08:50:00 - T-10)
+pushing: 2026-04-09T09:00:00  (WRONG - arrival is T-0!)
+critical: 2026-04-09T08:59:00
+alarm: 2026-04-09T09:00:00    (duplicate timestamp with pushing!)
 
 # 3-min buffer - WRONG output (2 anchors):
-firm: 08:58:00, alarm: 09:00:00
+firm: 2026-04-09T08:58:00, alarm: 2026-04-09T09:00:00
 # MISSING critical anchor at 08:59:00
 
 # 6-min buffer - WRONG output (duplicate timestamp):
-firm: 08:55:00, critical: 08:55:00  (DUPLICATE!)
+firm: 2026-04-09T08:55:00, critical: 2026-04-09T08:55:00  (DUPLICATE!)
 ```
 
 **Spec says (Section 2.4):**
