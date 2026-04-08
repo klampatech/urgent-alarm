@@ -4,18 +4,18 @@
 
 The current codebase contains a basic HTTP test server (`src/test_server.py`) with partial implementations of core systems. The specification defines 13 major systems. This plan identifies all gaps and prioritizes tasks by dependencies.
 
-**Current State:**
+**Current State (as of 2026-04-08):**
 | Component | Location | Status |
 |-----------|----------|--------|
-| HTTP Test Server | `src/test_server.py` | Basic HTTP wrapper, ~600 lines |
-| Chain Engine | `src/test_server.py` (lines 101-165) | Partial - basic computation exists |
-| Keyword Parser | `src/test_server.py` (lines 167-250) | Partial - brittle regex extraction |
-| Voice Templates | `src/test_server.py` (lines 252-350) | Partial - 1 variation per tier per personality |
-| Stats Calculator | `src/test_server.py` (lines 352-370) | Partial - basic hit rate |
-| DB Schema | `src/test_server.py` (lines 19-99) | Partial - missing columns and tables |
-| Test Harness | `harness/` | Empty - infrastructure needed |
-| Lib Modules | `src/lib/` | Does not exist - needs creation |
-| Scenarios | `scenarios/` | 15 YAML files ready |
+| HTTP Test Server | `src/test_server.py` | ~650 lines, functional basic endpoints |
+| Chain Engine | `src/test_server.py` (lines 101-180) | Partial - basic computation, some edge cases not handled |
+| Keyword Parser | `src/test_server.py` (lines 183-270) | Partial - regex extraction, limited patterns |
+| Voice Templates | `src/test_server.py` (lines 273-380) | Partial - 1 variation per tier per personality |
+| Stats Calculator | `src/test_server.py` (lines 383-400) | Partial - basic hit rate |
+| DB Schema | `src/test_server.py` (lines 19-97) | Partial - basic tables, missing columns |
+| Test Harness | `harness/` | **EMPTY** - infrastructure not created yet |
+| Lib Modules | `src/lib/` | **EMPTY** - no module structure |
+| Scenarios | `scenarios/` | 15 YAML files ready (chain, parse, voice, history, stats) |
 | Tests | `tests/` | Does not exist |
 
 ---
@@ -61,46 +61,55 @@ The current codebase contains a basic HTTP test server (`src/test_server.py`) wi
 
 **Spec Reference:** Section 14 — Definition of Done
 
-**Status:** ❌ Not implemented — harness directory is empty
+**Status:** ❌ **CRITICAL GAP** — harness directory is empty, this blocks all validation
 
 **Gaps:**
-- No scenario runner exists
+- No scenario runner exists (scenario_harness.py does not exist)
 - No test database setup
 - No mock fixtures for LLM/TTS
-- No assertion validators
+- No assertion validators (http_status, db_record, llm_judge)
+- 15 scenarios in `scenarios/` cannot be executed
 
 **Tasks:**
-- [ ] Create `ScenarioHarness` class that loads YAML scenarios
-- [ ] Implement scenario step executor (HTTP API calls)
-- [ ] Implement assertion validators (http_status, db_record, llm_judge)
+- [ ] Create `ScenarioHarness` class that loads YAML scenarios from `scenarios/` directory
+- [ ] Implement scenario step executor (HTTP API calls to test_server.py)
+- [ ] Implement assertion validators:
+  - `http_status` - validate HTTP status codes
+  - `db_record` - validate database records exist with conditions
+  - `llm_judge` - call LLM to evaluate output quality
 - [ ] Create `MockLanguageModelAdapter` for test fixtures
 - [ ] Create `MockTTSAdapter` for test fixtures (writes silent audio file)
 - [ ] Create `getInMemoryDatabase()` helper that resets between scenarios
 - [ ] Write result to `/tmp/ralph-scenario-result.json` after run
+- [ ] Support running single scenario or all scenarios
+- [ ] Report pass/fail per assertion and overall scenario
 
 **Verification:**
 - [ ] `python3 -m pytest harness/` runs successfully (when tests exist)
 - [ ] `python3 -m py_compile harness/scenario_harness.py src/test_server.py` passes
-- [ ] All 15 scenarios in `scenarios/` execute
+- [ ] All 15 scenarios in `scenarios/` execute without error
 
 ---
 
 ### 1.3 Refactor Monolithic test_server.py
-**Files to create:** `src/lib/__init__.py`, module split from `test_server.py`
+**Files to create:** `src/lib/__init__.py`, `src/lib/*/` modules
 
-**Status:** ⚠️ All code in single 600-line `test_server.py`
+**Status:** ⚠️ All code in single 650-line `test_server.py` — needs modularization
 
 **Tasks:**
+- [ ] Create `src/lib/__init__.py`
 - [ ] Create `src/lib/chain/__init__.py`, `src/lib/chain/engine.py`
 - [ ] Create `src/lib/parser/__init__.py`, `src/lib/parser/nl_parser.py`, `src/lib/parser/keyword_extractor.py`
 - [ ] Create `src/lib/voice/__init__.py`, `src/lib/voice/personalities.py`
 - [ ] Create `src/lib/stats/__init__.py`, `src/lib/stats/calculator.py`
 - [ ] Create `src/lib/db/__init__.py`, `src/lib/db/connection.py`, `src/lib/db/migrations.py`
-- [ ] Keep `test_server.py` as thin HTTP wrapper that imports from `src/lib/`
+- [ ] Refactor `test_server.py` to import from `src/lib/` — keep as thin HTTP wrapper
+- [ ] Ensure backward compatibility with existing API endpoints
 
 **Verification:**
-- [ ] All imports work after refactoring
-- [ ] Existing tests still pass
+- [ ] `python3 -m py_compile src/lib/**/*.py` passes for all modules
+- [ ] `python3 -m py_compile src/test_server.py` passes
+- [ ] Server starts and serves existing endpoints after refactoring
 
 ---
 
@@ -546,12 +555,36 @@ The current codebase contains a basic HTTP test server (`src/test_server.py`) wi
 
 ---
 
+## 🚨 Critical Path (Start Here)
+
+**Before any other work, Priority 1 MUST be completed.**
+
+```
+IMMEDIATE (Day 1):
+├── 1.2 Test Harness Infrastructure ← BLOCKING ALL VALIDATION
+│   └── 15 scenarios in scenarios/ cannot be executed
+└── 1.1 Database Schema + Migrations
+    └── All other features depend on correct DB schema
+        ↓
+DAY 2:
+└── 1.3 Refactor test_server.py → move logic to src/lib/
+        ↓
+DAY 3+:
+├── 2.1 Chain Engine (complete)
+├── 2.2 LLM Adapter + Parser
+└── Continue with remaining priorities...
+```
+
+**Why 1.2 is blocking:** The `harness/` directory is empty. Without `scenario_harness.py`, there is NO WAY to run the 15 validation scenarios in `scenarios/`. This means you cannot verify ANY implementation.
+
+---
+
 ## Implementation Order (Dependencies)
 
 ```
 Priority 1: Foundation
+├── 1.2 Test Harness Infrastructure ← DO FIRST (blocking)
 ├── 1.1 Database Schema + Migrations
-├── 1.2 Test Harness Infrastructure
 └── 1.3 Refactor Monolithic test_server.py
         ↓
 Priority 2: Core Domain
@@ -689,22 +722,22 @@ These tasks have minimal dependencies and can be started immediately:
 
 ## Status Summary
 
-| Priority | Task | Status |
-|----------|------|--------|
-| 1.1 | Database Schema + Migrations | ⚠️ Partial |
-| 1.2 | Test Harness Infrastructure | ❌ Not implemented |
-| 1.3 | Refactor Monolithic test_server.py | ⚠️ In single file |
-| 2.1 | Chain Engine Completeness | ⚠️ Partial |
-| 2.2 | LLM Adapter + Parser Enhancement | ⚠️ Partial |
-| 3.1 | TTS Adapter + Cache | ❌ Not implemented |
-| 3.2 | Voice Personality Variations | ⚠️ 1 variation (needs 3+) |
-| 4.1 | Notification Tier System | ❌ Not implemented |
-| 5.1 | Background Scheduling | ❌ Not implemented |
-| 6.1 | Calendar Adapters | ❌ Not implemented |
-| 7.1 | Location Check at Departure | ❌ Not implemented |
-| 8.1 | Snooze + Dismissal Flow | ❌ Not implemented |
-| 9.1 | History & Stats | ⚠️ Partial |
-| 10.1 | Sound Library | ❌ Not implemented |
+| Priority | Task | Status | Notes |
+|----------|------|--------|-------|
+| 1.1 | Database Schema + Migrations | ⚠️ Partial | Basic tables exist, missing columns/constraints |
+| **1.2** | **Test Harness Infrastructure** | ❌ **BLOCKING** | **Must be created first - 15 scenarios cannot run** |
+| 1.3 | Refactor Monolithic test_server.py | ⚠️ In single file | All logic in 650-line file |
+| 2.1 | Chain Engine Completeness | ⚠️ Partial | Missing edge cases and helper functions |
+| 2.2 | LLM Adapter + Parser Enhancement | ⚠️ Partial | Basic regex, needs LLM integration |
+| 3.1 | TTS Adapter + Cache | ❌ Not implemented | Message templates only, no audio |
+| 3.2 | Voice Personality Variations | ⚠️ 1 variation | Needs 3+ per tier per spec |
+| 4.1 | Notification Tier System | ❌ Not implemented | No sound tiers, DND, quiet hours |
+| 5.1 | Background Scheduling | ❌ Not implemented | No Notifee integration |
+| 6.1 | Calendar Adapters | ❌ Not implemented | No EventKit/Google Calendar |
+| 7.1 | Location Check at Departure | ❌ Not implemented | No location services |
+| 8.1 | Snooze + Dismissal Flow | ❌ Not implemented | No snooze/dismiss handlers |
+| 9.1 | History & Stats | ⚠️ Partial | Basic hit rate, missing feedback loop |
+| 10.1 | Sound Library | ❌ Not implemented | No sound categories or import |
 
 ---
 
