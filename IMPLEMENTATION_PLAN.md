@@ -1,470 +1,528 @@
-# Implementation Plan — Urgent Voice Alarm App
+# URGENT Alarm - Implementation Plan
 
-## Overview
+## Executive Summary
 
-**Spec Source:** `specs/urgent-voice-alarm-app-2026-04-08.spec.md`
-**Current State:** Python HTTP test server (`src/test_server.py`) provides a validation harness with partial implementations of core logic. The actual mobile app (React Native + TypeScript) is NOT yet started.
-**Target:** Complete React Native mobile app per spec sections 1-14.
+The Urgent Alarm app is a mobile alarm application with AI-escalating voice messages. The current codebase (`src/test_server.py`) contains a minimal Python HTTP server with partial implementations of:
+- Chain engine (basic anchor computation)
+- Natural language parser (keyword extraction only)
+- Voice message generation (5 personalities, no TTS)
+- Simple SQLite database (incomplete schema)
+
+**Gap Analysis**: ~85% of the spec remains unimplemented. The codebase lacks proper architecture, all external adapters, mobile framework, background scheduling, and most features.
 
 ---
 
-## Phase 1: Foundation (Critical Path)
+## Priority 1: Foundation & Core Infrastructure
 
-### Task 1.1 — Initialize React Native Project
-- [ ] Initialize React Native 0.76+ project with TypeScript
-- [ ] Install core dependencies:
-  - React Navigation (stack + bottom tabs)
-  - Zustand (state management)
-  - SQLite: `expo-sqlite` or `react-native-quick-sqlite`
-  - Notifee (background scheduling)
-  - Audio player (expo-av)
-- [ ] Set up project structure:
-  ```
-  src/
-  ├── domain/           # Business logic (chain engine, parser)
-  ├── data/             # Repositories, SQLite adapters
-  ├── services/         # TTS, LLM, Calendar, Location
-  ├── ui/               # Screens, components
-  └── infrastructure/   # Background scheduler, notifications
-  ```
-- [ ] Configure ESLint, Prettier, Jest, Detox
+### 1.1 Project Structure & Architecture
+**Status**: No structure exists  
+**Priority**: Critical (blocks all development)
 
-### Task 1.2 — Database Layer (Section 13)
-- [ ] Implement full SQLite schema per spec:
-  ```sql
-  reminders (
-    id TEXT PRIMARY KEY,           -- UUID v4
-    destination TEXT NOT NULL,
-    arrival_time TEXT NOT NULL,    -- ISO 8601
-    drive_duration INTEGER NOT NULL,
-    reminder_type TEXT NOT NULL,   -- countdown_event | simple_countdown | morning_routine | standing_recurring
-    voice_personality TEXT NOT NULL,
-    sound_category TEXT,
-    selected_sound TEXT,
-    custom_sound_path TEXT,
-    origin_lat REAL,
-    origin_lng REAL,
-    origin_address TEXT,
-    status TEXT DEFAULT 'pending', -- pending | active | completed | cancelled
-    calendar_event_id TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-  
-  anchors (
-    id TEXT PRIMARY KEY,
-    reminder_id TEXT REFERENCES reminders(id) ON DELETE CASCADE,
-    timestamp TEXT NOT NULL,
-    urgency_tier TEXT NOT NULL,     -- calm | casual | pointed | urgent | pushing | firm | critical | alarm
-    tts_clip_path TEXT,
-    tts_fallback BOOLEAN DEFAULT FALSE,
-    fired BOOLEAN DEFAULT FALSE,
-    fire_count INTEGER DEFAULT 0,
-    snoozed_to TEXT,               -- new timestamp if snoozed
-    UNIQUE(reminder_id, timestamp)
-  )
-  
-  history (
-    id TEXT PRIMARY KEY,
-    reminder_id TEXT REFERENCES reminders(id),
-    destination TEXT NOT NULL,
-    scheduled_arrival TEXT NOT NULL,
-    actual_arrival TEXT,
-    outcome TEXT NOT NULL,         -- hit | miss | snoozed
-    feedback_type TEXT,            -- timing_right | left_too_early | left_too_late | other
-    missed_reason TEXT,             -- background_task_killed | dnd_suppressed | user_dismissed | null
-    created_at TEXT NOT NULL
-  )
-  
-  destination_adjustments (
-    destination TEXT PRIMARY KEY,
-    adjustment_minutes INTEGER DEFAULT 0,
-    hit_count INTEGER DEFAULT 0,
-    miss_count INTEGER DEFAULT 0,
-    updated_at TEXT NOT NULL
-  )
-  
-  user_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)
-  calendar_sync (calendar_type TEXT PRIMARY KEY, last_sync_at TEXT, sync_token TEXT, is_connected BOOLEAN)
-  custom_sounds (id TEXT PRIMARY KEY, filename TEXT, original_name TEXT, category TEXT, file_path TEXT, duration_seconds REAL, created_at TEXT)
-  ```
-- [ ] Enable WAL mode, foreign keys (`PRAGMA foreign_keys = ON`), UUID v4 generation
-- [ ] Implement versioned migrations system (schema_v1, v2, v3...)
-- [ ] Add in-memory test mode (`?mode=memory` for SQLite)
-- [ ] **Acceptance:** Cascade delete works, FK enforcement works, UUIDs are valid v4
+- [ ] Create `src/lib/` directory with modules:
+  - `src/lib/chain_engine.py` - Escalation chain computation
+  - `src/lib/parser.py` - LLM adapter + keyword fallback
+  - `src/lib/voice.py` - Voice personality system + TTS adapter
+  - `src/lib/database.py` - SQLite with full schema + migrations
+  - `src/lib/adapters/` - Adapter interfaces (ILanguageModel, ITTS, ICalendar, ILocation)
+  - `src/lib/notification.py` - Notification tier system
+  - `src/lib/scheduler.py` - Background scheduling abstraction
+  - `src/lib/stats.py` - History, hit rate, feedback loop
 
-### Task 1.3 — Chain Engine (Section 2) — Port from test_server.py
-- [ ] Port `compute_escalation_chain()` to TypeScript with exact logic:
-  - ≥25 min buffer: 8 anchors (calm, casual, pointed, urgent, pushing, firm, critical, alarm)
+- [ ] Create `src/mobile/` directory (React Native project scaffold)
+- [ ] Create `tests/` directory with pytest configuration
+
+### 1.2 Complete Database Schema & Migrations
+**Status**: Partial schema exists  
+**Spec Section**: 13  
+**Priority**: Critical (all features depend on it)
+
+**Missing tables/columns:**
+- [ ] `reminders`: Add `origin_lat`, `origin_lng`, `origin_address`, `custom_sound_path`, `calendar_event_id`
+- [ ] `anchors`: Add `tts_fallback`, `snoozed_to`
+- [ ] `history`: Add `actual_arrival`, `missed_reason`, `updated_at`
+- [ ] `destination_adjustments`: Add `updated_at`
+- [ ] `user_preferences`: Add `updated_at`
+- [ ] Create `calendar_sync` table
+- [ ] Create `custom_sounds` table
+- [ ] Create `schema_migrations` table for versioning
+
+**Migration system:**
+- [ ] Create migration runner that applies sequential versions
+- [ ] Add `mode=memory` for tests (fresh in-memory DB)
+- [ ] Enable foreign keys and WAL mode
+
+### 1.3 Refactor & Test Chain Engine
+**Status**: Basic implementation exists  
+**Spec Section**: 2  
+**Priority**: Critical
+
+**Current state**: `compute_escalation_chain()` partially implemented  
+**Missing:**
+- [ ] `get_next_unfired_anchor(reminder_id)` function
+- [ ] Fix chain tier logic:
+  - ≥25 min: 8 anchors (calm, casual, pointed, urgent, pushing, firm, critical, alarm)
   - 20-24 min: 7 anchors (skip calm)
-  - 15-19 min: 6 anchors (skip calm/casual)
-  - 10-14 min: 5 anchors (skip calm/casual/pointed)
+  - 10-19 min: 5 anchors (urgent, pushing, firm, critical, alarm)
   - 5-9 min: 3 anchors (firm, critical, alarm)
-  - 3-4 min: 2 anchors (firm, alarm)
-  - 1-2 min: 1 anchor (alarm)
-- [ ] Port `validate_chain()` to TypeScript
-- [ ] Implement `get_next_unfired_anchor(reminder_id)` for crash recovery
-- [ ] Add unit tests for determinism (TC-06)
-- [ ] **Acceptance (per spec TC-01 to TC-06):** All chain scenarios pass
+  - <5 min: 2 anchors (critical/firm, alarm)
+- [ ] Chain determinism guarantee (same inputs = same outputs)
+- [ ] Unit tests for all 6 test scenarios (TC-01 through TC-06)
 
 ---
 
-## Phase 2: Reminder Creation Flow
+## Priority 2: Core Feature Adapters
 
-### Task 2.1 — LLM Parser (Section 3)
-- [ ] Create `ILanguageModelAdapter` interface (mock-able for tests)
-- [ ] Implement MiniMax API adapter (configurable via env var `LLM_PROVIDER=minimax`)
-- [ ] Implement Anthropic API adapter (configurable via env var `LLM_PROVIDER=anthropic`)
-- [ ] Implement keyword extraction fallback (regex patterns):
-  ```
-  Patterns:
-  - "X minute drive" / "X min drive" / "X-minute drive"
-  - "in X minutes" (simple countdown)
-  - "at HH:MMam/pm"
-  - "tomorrow HH:MM"
-  - "arrive at X" / "check-in at X"
-  ```
-- [ ] Handle all input formats per spec TC-01 to TC-07
-- [ ] **Acceptance:** Full natural language parse, simple countdown parse, tomorrow date resolution, LLM failure fallback, manual field correction, unintelligible input rejection
+### 2.1 LLM Parser Adapter
+**Status**: Basic keyword extraction exists  
+**Spec Section**: 3  
+**Priority**: High
 
-### Task 2.2 — Quick Add UI
-- [ ] Create reminder creation screen with text/speech input toggle
-- [ ] Display parsed interpretation card before confirmation:
-  ```
-  ┌─────────────────────────────────────┐
-  │ 📍 Parker Dr check-in              │
-  │ ⏰ 9:00 AM (in 2 hours)            │
-  │ 🚗 30 min drive | Depart 8:30 AM    │
-  │                                     │
-  │ [Edit destination] [Edit time]      │
-  │ [Edit drive time]                   │
-  │                                     │
-  │ [Cancel]              [Create ✓]     │
-  └─────────────────────────────────────┘
-  ```
-- [ ] Handle manual field correction (destination, arrival_time, drive_duration)
-- [ ] Support 4 reminder types: countdown_event, simple_countdown, morning_routine, standing_recurring
+**Missing:**
+- [ ] `ILanguageModelAdapter` interface
+- [ ] `MinimaxAdapter` (Anthropic-compatible API)
+- [ ] `AnthropicAdapter` 
+- [ ] `MockLanguageModelAdapter` for tests
+- [ ] System prompt for extraction schema
+- [ ] Keyword extraction fallback improvements:
+  - Handle "X min drive", "X-minute drive", "in X minutes", "arrive at X", "check-in at X"
+  - Handle "tomorrow", "today" date resolution
+  - Handle simple countdowns: "dryer in 3 min" → arrival_time = now + 3min
 
-### Task 2.3 — Voice Personality System (Section 10)
-- [ ] Define personality data structure with templates (3 variations per tier per personality):
-  ```typescript
-  interface VoicePersonality {
-    id: 'coach' | 'assistant' | 'best_friend' | 'no_nonsense' | 'calm' | 'custom';
-    voice_id: string;  // ElevenLabs voice ID
-    system_prompt: string;
-    custom_prompt?: string;  // max 200 chars for custom mode
-    templates: {
-      [urgency_tier: string]: string[];  // 3 variations each
-    };
-  }
-  ```
-- [ ] Implement all 5 built-in personalities with message variations
-- [ ] Implement custom personality mode
-- [ ] Store selected personality in user preferences
-- [ ] **Acceptance:** Coach at T-5 → "Let's GO! 5 min to Parker Dr!", No-nonsense → "5 min. Parker Dr. Leave."
+**Test scenarios:**
+- [ ] TC-01: Full natural language parse
+- [ ] TC-02: Simple countdown parse
+- [ ] TC-03: Tomorrow date resolution
+- [ ] TC-04: LLM API failure fallback
+- [ ] TC-05: Manual field correction (via confirmation card - mobile)
+- [ ] TC-06: Unintelligible input rejection
+- [ ] TC-07: Mock adapter in tests
 
-### Task 2.4 — TTS Generation (Section 4)
-- [ ] Create `ITTSAdapter` interface (mock-able)
-- [ ] Implement ElevenLabs API adapter (configurable via env var)
-- [ ] Implement TTS cache storage: `FileSystem.documentDirectory + '/tts_cache/{reminder_id}/'`
-- [ ] Add fallback: system notification sound + text when TTS fails (`tts_fallback = true`)
-- [ ] Invalidate cache on reminder deletion
-- [ ] **Acceptance:** Clips generated at creation, played from cache at runtime, fallback works
+### 2.2 Voice Personality System
+**Status**: Basic templates exist  
+**Spec Section**: 10  
+**Priority**: High
 
----
+**Current state**: `generate_voice_message()` with 5 personalities  
+**Missing:**
+- [ ] Minimum 3 message variations per tier per personality (avoid repetition)
+- [ ] Custom personality prompt support (max 200 chars)
+- [ ] ElevenLabs voice ID mapping per personality
+- [ ] Voice settings/style parameters for custom prompts
 
-## Phase 3: Voice & Notifications
+**Test scenarios:**
+- [ ] TC-01: Coach personality message format
+- [ ] TC-02: No-nonsense personality brevity
+- [ ] TC-03: Custom personality tone
+- [ ] TC-04: Personality immutability for existing reminders
+- [ ] TC-05: Message variation (distinct phrasings)
 
-### Task 3.1 — Notification Layer (Section 5)
-- [ ] Implement notification tier escalation:
-  | Tier | Sound |
-  |------|-------|
-  | calm/casual | gentle chime |
-  | pointed/urgent | pointed beep |
-  | pushing/firm | urgent siren |
-  | critical/alarm | looping alarm |
-- [ ] Handle system DND:
-  - Early anchors: silent notification only
-  - Final 5 minutes: visual override + vibration
-- [ ] Implement quiet hours suppression (configurable, default 10pm–7am)
-- [ ] Queue anchors skipped due to DND/quiet hours (fire after restriction ends)
-- [ ] Drop anchors >15 minutes overdue
-- [ ] Serialize chain execution (queue overlapping anchors)
-- [ ] T-0 alarm loops until user dismisses or snoozes
+### 2.3 TTS Adapter
+**Status**: Not implemented  
+**Spec Section**: 4  
+**Priority**: High
 
-### Task 3.2 — Background Scheduling (Section 6)
-- [ ] Integrate Notifee for iOS (BGTaskScheduler) and Android (WorkManager)
-- [ ] Register each anchor as individual background task with precise trigger timestamp
-- [ ] Implement recovery scan on app launch:
-  ```
-  On app launch:
-  1. Query all unfired anchors where scheduled time < now
-  2. If anchor is within 15-minute grace window → fire it
-  3. If anchor is >15 minutes overdue → mark missed and log missed_reason
-  4. Re-register all remaining pending (unfired) anchors with Notifee
-  ```
-- [ ] Handle missed anchors (log missed_reason = "background_task_killed")
-- [ ] Log warning for late fires (>60s after scheduled)
+**Missing:**
+- [ ] `ITTSAdapter` interface
+- [ ] `ElevenLabsAdapter` with environment variable configuration
+- [ ] `MockTTSAdapter` for tests (writes 1-sec silent file)
+- [ ] TTS cache directory: `/tts_cache/{reminder_id}/`
+- [ ] Async generation with 30-second timeout
+- [ ] Fallback: system notification sound + text on TTS failure
+- [ ] Cache invalidation on reminder deletion
 
-### Task 3.3 — Audio Player
-- [ ] Play TTS clip from local cache via expo-av
-- [ ] Layer notification sound under TTS (sound plays first, then TTS)
-- [ ] Handle audio focus / interruption (pause TTS if phone call)
+**Test scenarios:**
+- [ ] TC-01: TTS clip generation at creation (8 MP3 files)
+- [ ] TC-02: Anchor fires from cache (no network call)
+- [ ] TC-03: TTS fallback on API failure
+- [ ] TC-04: TTS cache cleanup on delete
+- [ ] TC-05: Mock TTS in tests
 
 ---
 
-## Phase 4: User Interaction
+## Priority 3: HTTP API & Web Server
 
-### Task 4.1 — Snooze Flow (Section 9)
-- [ ] Tap snooze: snooze 1 minute, TTS "Okay, snoozed 1 minute"
+### 3.1 Expand HTTP Endpoints
+**Status**: Basic endpoints exist  
+**Spec Section**: N/A (infrastructure)  
+**Priority**: High
+
+**Existing:**
+- `GET /health`
+- `GET /chain?arrival=X&duration=Y`
+- `GET /reminders`
+- `POST /reminders`
+- `POST /parse`
+- `POST /voice/message`
+- `POST /history`
+- `POST /anchors/fire`
+
+**Missing:**
+- [ ] `GET /reminders/{id}` - Get single reminder
+- [ ] `DELETE /reminders/{id}` - Delete reminder (cascade to anchors)
+- [ ] `PUT /reminders/{id}` - Update reminder
+- [ ] `GET /anchors?reminder_id=X` - Get anchors for reminder
+- [ ] `GET /anchors/next?reminder_id=X` - Get next unfired anchor
+- [ ] `POST /anchors/snooze` - Snooze anchor with duration
+- [ ] `POST /anchors/fire` - Already exists, verify implementation
+- [ ] `GET /stats/hit-rate?days=7` - Parameterized hit rate
+- [ ] `GET /stats/streaks` - Streak counters
+- [ ] `GET /stats/common-miss` - Common miss window
+- [ ] `GET /adjustments?destination=X` - Get destination adjustment
+- [ ] `POST /preferences` - Set user preference
+- [ ] `GET /preferences/{key}` - Get user preference
+
+### 3.2 Database Session Management
+**Status**: Simple connect/disconnect per request  
+**Priority**: Medium
+
+- [ ] Add connection pooling or thread-local sessions
+- [ ] Ensure foreign keys enabled per connection
+- [ ] Handle concurrent requests safely
+
+---
+
+## Priority 4: Mobile App (React Native)
+
+### 4.1 Project Setup
+**Status**: Not started  
+**Spec Section**: Technical Approach  
+**Priority**: High
+
+- [ ] Initialize React Native project (npx react-native init UrgentAlarm)
+- [ ] Install dependencies:
+  - `@notifee/react-native` - Background notifications
+  - `react-native-event-kit` or `react-native-apple-calendar` - Calendar access
+  - `@react-native-community/geolocation` - Location check
+  - `elevenlabs-react-native` or REST API calls to ElevenLabs
+  - `expo-av` or `react-native-sound` - Audio playback
+  - `@react-native-async-storage/async-storage` - Local preferences
+- [ ] Configure iOS/Android native modules
+
+### 4.2 Quick Add Screen
+**Status**: Not started  
+**Spec Section**: Features (Quick Add)  
+**Priority**: High
+
+- [ ] Single text/speech input field
+- [ ] Speech-to-text integration
+- [ ] Parsed interpretation confirmation card
+- [ ] Manual field correction UI
+- [ ] Voice personality selector
+- [ ] Sound category selector
+
+### 4.3 Reminder List & Detail Screens
+**Status**: Not started  
+**Spec Section**: N/A  
+**Priority**: Medium
+
+- [ ] List all active reminders
+- [ ] Swipe to delete
+- [ ] Tap to view/edit
+- [ ] Status indicators (pending, active, completed)
+
+### 4.4 Notification & Alarm UI
+**Status**: Not started  
+**Spec Section**: 5, 9  
+**Priority**: High
+
+- [ ] Tap snooze (1 min)
+- [ ] Tap-and-hold custom snooze picker (1, 3, 5, 10, 15 min)
+- [ ] Swipe-to-dismiss with feedback prompt
+- [ ] Visual notification tier escalation
+- [ ] TTS confirmation: "Okay, snoozed X minutes"
+- [ ] T-0 alarm looping until user action
+
+### 4.5 Settings Screen
+**Status**: Not started  
+**Spec Section**: N/A  
+**Priority**: Medium
+
+- [ ] Voice personality selection
+- [ ] Quiet hours configuration (default: 10pm-7am)
+- [ ] Calendar integration toggle + permissions
+- [ ] Location awareness toggle + permissions
+- [ ] Sound library access
+
+### 4.6 History & Stats Screen
+**Status**: Not started  
+**Spec Section**: 11  
+**Priority**: Medium
+
+- [ ] Weekly hit rate display
+- [ ] Current streak counter
+- [ ] Common miss window indicator
+- [ ] Per-destination adjustment display
+
+---
+
+## Priority 5: Background Scheduling & Notifications
+
+### 5.1 Notifee Integration
+**Status**: Not started  
+**Spec Section**: 6  
+**Priority**: Critical
+
+**Missing:**
+- [ ] Register each anchor as Notifee task with trigger timestamp
+- [ ] iOS: Use `BGAppRefreshTask` for timing + `BGProcessingTask` for TTS pre-warm
+- [ ] Recovery scan on app launch:
+  - Fire overdue unfired anchors within 15-minute grace window
+  - Drop anchors >15 minutes overdue, log with `missed_reason`
+- [ ] Re-register pending anchors on crash recovery
+- [ ] Late fire warning (>60 seconds after scheduled)
+
+### 5.2 Notification Behavior
+**Status**: Not started  
+**Spec Section**: 5  
+**Priority**: High
+
+**Missing:**
+- [ ] Notification tier escalation:
+  - calm/casual → gentle chime
+  - pointed/urgent → pointed beep
+  - pushing/firm → urgent siren
+  - critical/alarm → looping alarm
+- [ ] DND awareness:
+  - Pre-5-minute during DND → silent notification
+  - Final 5 minutes during DND → visual override + vibration
+- [ ] Quiet hours suppression (queue for post-quiet-hours)
+- [ ] Overdue anchor drop (>15 minutes overdue)
+- [ ] Chain overlap serialization (queue new anchors until current chain completes)
+
+### 5.3 Snooze & Dismissal Flow
+**Status**: Not started  
+**Spec Section**: 9  
+**Priority**: High
+
+**Missing:**
+- [ ] Tap snooze: 1 minute, TTS confirmation
 - [ ] Tap-and-hold: custom snooze picker (1, 3, 5, 10, 15 min)
-- [ ] Chain re-computation: shift remaining anchors by snooze duration
-  ```
-  Example: snooze at 8:45 with 3-min snooze
-  Original: 8:30, 8:35, 8:40, 8:45, 8:50, 8:55, 8:59, 9:00
-  Recomputed: 8:48, 8:53, 8:59, 9:00 (remaining anchors shifted +3)
-  ```
-- [ ] Re-register snoozed anchors with Notifee
-- [ ] Persist snooze state for crash recovery (`snoozed_to` field in anchors table)
-- [ ] **Acceptance:** After custom snooze and app restart, remaining anchors fire at adjusted times
-
-### Task 4.2 — Dismissal & Feedback (Section 9)
-- [ ] Swipe-to-dismiss: show feedback prompt "You missed Parker Dr — was the timing right?"
-- [ ] Yes (timing right): store feedback, no adjustment
-- [ ] No → "Left too early": store feedback
-- [ ] No → "Left too late": +2 min adjustment per occurrence, capped at +15
-- [ ] No → "Other": store feedback type
-- [ ] **Acceptance:** 3 "Left too late" for "Parker Dr" → next reminder adds 6 min to drive_duration
-
-### Task 4.3 — History & Stats (Section 11)
-- [ ] Calculate hit rate: `count(outcome='hit') / count(outcome!='pending') * 100` for trailing 7 days
-- [ ] Feedback loop: adjust `drive_duration` per destination
-  ```
-  adjusted_drive_duration = stored_drive_duration + (late_count * 2_minutes)
-  Cap at +15 minutes maximum
-  ```
-- [ ] Display "common miss window" (most frequently missed urgency tier per destination)
-- [ ] Streak counter for recurring reminders (increment on hit, reset on miss)
-- [ ] Implement 90-day history retention (archive older data)
-- [ ] **Acceptance:** Stats computable from history table alone
+- [ ] Chain re-computation after snooze:
+  - Shift remaining anchors: `new_timestamp = now + original_time_remaining`
+  - Re-register with Notifee
+- [ ] Swipe dismiss: feedback prompt ("Was timing right?")
+- [ ] Feedback: "Left too early" / "Left too late" / "Other"
+- [ ] Feedback persistence (adjust future departure estimates)
 
 ---
 
-## Phase 5: Integrations
+## Priority 6: External Integrations
 
-### Task 5.1 — Calendar Integration (Section 7)
-- [ ] Create `ICalendarAdapter` interface (mock-able)
-- [ ] Implement Apple Calendar adapter (EventKit via react-native-calendars or native module)
-- [ ] Implement Google Calendar adapter (Google Calendar API via expo-google-sign-in)
-- [ ] Sync on launch, every 15 minutes, via background refresh
-- [ ] Surface suggestion cards for events with locations:
-  ```
-  ┌─────────────────────────────────────┐
-  │ 📅 Parker Dr check-in              │
-  │    9:00 AM — Calendar               │
-  │                                     │
-  │ [Add Reminder]  [Dismiss]           │
-  └─────────────────────────────────────┘
-  ```
-- [ ] Handle recurring events (generate reminder for each occurrence)
-- [ ] Handle permission denial gracefully (show explanation banner with settings link)
-- [ ] **Acceptance:** Events with locations appear as suggestion cards within 2 min of sync
+### 6.1 Calendar Integration
+**Status**: Not started  
+**Spec Section**: 7  
+**Priority**: Medium
 
-### Task 5.2 — Location Awareness (Section 8)
-- [ ] Single location check at departure anchor only (T-drive_duration)
-- [ ] Resolve origin from: user-specified address or current device location at creation
-- [ ] Compare against 500m geofence using haversine distance
-- [ ] If still at origin: fire firm/critical tier immediately instead of departure nudge
-- [ ] If already left: normal chain proceeds from departure anchor
-- [ ] Request permission at first location-aware reminder (not at app launch)
-- [ ] Handle denied permission gracefully (show note "Location-based escalation disabled")
-- [ ] **Acceptance:** Only one location API call per reminder (at departure fire)
+**Missing:**
+- [ ] `ICalendarAdapter` interface
+- [ ] `AppleCalendarAdapter` (EventKit)
+- [ ] `GoogleCalendarAdapter` (Google Calendar API)
+- [ ] Sync scheduler (on launch + every 15 minutes + background refresh)
+- [ ] Event filtering (only events with location)
+- [ ] Suggestion cards for calendar events
+- [ ] Recurring event handling
+- [ ] Permission denial handling with settings link
+- [ ] Sync failure graceful degradation
 
-### Task 5.3 — Sound Library (Section 12)
-- [ ] Bundle 5 built-in sounds per category (commute, routine, errand)
-- [ ] Implement custom audio import (MP3, WAV, M4A, max 30 sec) via expo-document-picker
-- [ ] Transcode and normalize imported sounds to AAC
-- [ ] Per-reminder sound selection (stored in `selected_sound` field)
-- [ ] Handle corrupted sound fallback (use category default, log error)
-- [ ] **Acceptance:** Built-in sounds play without network, custom import works, corrupted fallback works
+**Test scenarios:**
+- [ ] TC-01: Apple Calendar event suggestion
+- [ ] TC-02: Google Calendar event suggestion
+- [ ] TC-03: Suggestion → reminder creation
+- [ ] TC-04: Permission denial handling
+- [ ] TC-05: Sync failure graceful degradation
+- [ ] TC-06: Recurring event handling
+
+### 6.2 Location Awareness
+**Status**: Not started  
+**Spec Section**: 8  
+**Priority**: Medium
+
+**Missing:**
+- [ ] Single location check at departure anchor (T-drive_duration)
+- [ ] Origin resolution: user-specified address OR current device location
+- [ ] CoreLocation (iOS) / FusedLocationProvider (Android) call
+- [ ] Geofence comparison (500m radius)
+- [ ] Escalation if user still at origin:
+  - Fire firm/critical tier immediately instead of calm departure nudge
+- [ ] Location permission request at first location-aware reminder (not on launch)
+- [ ] No location history storage
+
+**Test scenarios:**
+- [ ] TC-01: User still at origin at departure
+- [ ] TC-02: User already left at departure
+- [ ] TC-03: Location permission request
+- [ ] TC-04: Location permission denied
+- [ ] TC-05: Single location check only
+
+### 6.3 Sound Library
+**Status**: Not started  
+**Spec Section**: 12  
+**Priority**: Low (Phase 2)
+
+**Missing:**
+- [ ] Built-in sounds bundled with app (5 per category)
+- [ ] Sound categories: Commute, Routine, Errand, Custom
+- [ ] Custom audio import: MP3, WAV, M4A (max 30 seconds)
+- [ ] File picker integration
+- [ ] Sound transcoding to normalized format
+- [ ] Corrupted sound fallback + error display
 
 ---
 
-## Phase 6: Testing
+## Priority 7: Feedback Loop & Stats
 
-### Task 6.1 — Unit Tests
-- [ ] Chain engine determinism tests (TC-01 to TC-06 per spec)
-- [ ] Parser fixture tests (mock ILanguageModelAdapter)
-- [ ] TTS adapter mock implementation
-- [ ] LLM adapter mock implementation
-- [ ] Database migrations and cascade tests
-- [ ] Voice personality message generation tests (3 variations each)
-- [ ] Hit rate calculation tests
+### 7.1 Feedback Loop Implementation
+**Status**: Basic history recording exists  
+**Spec Section**: 11  
+**Priority**: High
 
-### Task 6.2 — Integration Tests
+**Current state**: `POST /history` records outcomes  
+**Missing:**
+- [ ] Destination adjustment calculation:
+  - `adjusted_drive_duration = stored_drive_duration + (late_count * 2_minutes)`
+  - Cap at +15 minutes
+- [ ] Auto-apply adjustments to new reminders for same destination
+
+### 7.2 Stats Calculations
+**Status**: Basic hit rate exists  
+**Spec Section**: 11  
+**Priority**: Medium
+
+**Missing:**
+- [ ] Hit rate: `count(outcome='hit') / count(outcome!='pending') * 100` for trailing 7 days
+- [ ] Common miss window: most frequently missed urgency tier
+- [ ] Streak counter: increment on hit, reset on miss for recurring reminders
+- [ ] All stats derived from history table (no separate stats store)
+
+### 7.3 Data Retention
+**Status**: Not specified  
+**Spec Section**: 11  
+**Priority**: Low
+
+- [ ] Archive history entries older than 90 days
+- [ ] Keep archived data accessible
+
+---
+
+## Priority 8: Test Coverage
+
+### 8.1 Unit Tests
+**Status**: None  
+**Spec Section**: 14  
+**Priority**: High
+
+**Missing:**
+- [ ] Chain engine determinism tests
+- [ ] Parser fixtures (mock LLM adapter)
+- [ ] TTS adapter mock tests
+- [ ] LLM adapter mock tests
+- [ ] Keyword extraction tests
+- [ ] Schema validation tests
+- [ ] Stats calculation tests
+
+### 8.2 Integration Tests
+**Status**: None  
+**Spec Section**: 14  
+**Priority**: High
+
+**Missing:**
 - [ ] Full reminder creation flow (parse → chain → TTS → persist)
 - [ ] Anchor firing (schedule → fire → mark fired)
 - [ ] Snooze recovery (snooze → recompute → re-register)
-- [ ] Feedback loop (dismiss → feedback → adjustment)
-- [ ] Calendar sync → suggestion → reminder creation
+- [ ] Feedback loop (dismiss → feedback → adjustment applied)
 
-### Task 6.3 — E2E Tests (Detox)
-- [ ] Quick Add flow (text input → confirmation → chain created)
-- [ ] Reminder confirmation and display
+### 8.3 E2E Tests (Detox)
+**Status**: Not started  
+**Spec Section**: 14  
+**Priority**: Medium (Phase 2)
+
+- [ ] Quick Add flow
+- [ ] Reminder confirmation
 - [ ] Anchor firing sequence
-- [ ] Snooze interaction (tap and custom)
+- [ ] Snooze interaction
 - [ ] Dismissal feedback
 - [ ] Settings navigation
 - [ ] Sound library browsing
 
 ---
 
-## Priority Order (Dependencies)
+## Priority 9: Project Configuration
 
-```
-Week 1: Foundation
-┌─────────────────────────────────────────────────────────────┐
-│ 1.1 React Native Project Init                               │
-│ 1.2 Database Layer (full schema per spec)                   │
-│ 1.3 Chain Engine (port from test_server.py + unit tests)    │
-└─────────────────────────────────────────────────────────────┘
+### 9.1 Environment Configuration
+**Status**: Hardcoded values  
+**Priority**: Medium
 
-Week 2: Core Reminder Creation
-┌─────────────────────────────────────────────────────────────┐
-│ 2.1 LLM Parser (interface + MiniMax + keyword fallback)     │
-│ 2.2 Quick Add UI (confirmation card)                        │
-│ 2.3 Voice Personality (5 built-in + custom, 3 variations)   │
-│ 2.4 TTS Generation (ElevenLabs + cache)                    │
-└─────────────────────────────────────────────────────────────┘
+- [ ] Environment variables:
+  - `ELEVENLABS_API_KEY` - TTS API
+  - `LLM_API_KEY` - MinMax or Anthropic
+  - `LLM_PROVIDER` - "minimax" or "anthropic"
+  - `DB_PATH` - SQLite database path
+  - `TTS_CACHE_DIR` - TTS clip cache directory
 
-Week 3: Notification & Audio
-┌─────────────────────────────────────────────────────────────┐
-│ 3.1 Notifications (tier escalation, DND, quiet hours)      │
-│ 3.2 Background Scheduling (Notifee, recovery scan)          │
-│ 3.3 Audio Player                                            │
-└─────────────────────────────────────────────────────────────┘
+### 9.2 Dependencies
+**Status**: Minimal  
+**Priority**: Medium
 
-Week 4: User Interaction
-┌─────────────────────────────────────────────────────────────┐
-│ 4.1 Snooze Flow (tap, custom, chain recompute)             │
-│ 4.2 Dismissal & Feedback (prompt, adjustment)              │
-│ 4.3 History & Stats (hit rate, streak, 90-day retention)   │
-└─────────────────────────────────────────────────────────────┘
+**Python (server):**
+- [ ] flask or fastapi (API framework)
+- [ ] requests (HTTP client for LLM/TTS APIs)
+- [ ] pytest (testing)
+- [ ] python-dateutil (date parsing)
 
-Week 5: Integrations
-┌─────────────────────────────────────────────────────────────┐
-│ 5.1 Calendar Integration (EventKit, Google Calendar)        │
-│ 5.2 Location Awareness (500m geofence, single check)       │
-│ 5.3 Sound Library (built-in + import + fallback)            │
-└─────────────────────────────────────────────────────────────┘
-
-Week 6: Testing
-┌─────────────────────────────────────────────────────────────┐
-│ 6.1 Unit Tests (chain, parser, TTS mock, LLM mock)         │
-│ 6.2 Integration Tests (full flows)                          │
-│ 6.3 E2E Tests (Detox)                                      │
-└─────────────────────────────────────────────────────────────┘
-```
+**React Native (mobile):**
+- [ ] @notifee/react-native
+- [ ] @react-native-community/geolocation
+- [ ] @react-native-async-storage/async-storage
+- [ ] react-native-sound or expo-av
+- [ ] @react-native-picker/picker (snooze duration)
 
 ---
 
-## Gap Analysis: Current State vs. Spec
+## Implementation Order Summary
 
-| Component | Current (Python test_server.py) | Required (TypeScript/Mobile) | Status |
-|-----------|--------------------------------|------------------------------|--------|
-| **Platform** | Python HTTP server (harness) | React Native mobile app | ❌ Missing |
-| **Chain Engine** | ✓ Full Python impl | TypeScript + unit tests | ⚠️ Port needed |
-| **Chain Compression** | ✓ Partial (all cases) | Full spec with exact anchor counts | ✓ Covered |
-| **Parser** | Keyword regex only | LLM adapter + keyword fallback | ⚠️ Upgrade needed |
-| **LLM Adapter** | None | ILanguageModelAdapter interface | ❌ Missing |
-| **Voice Personalities** | ✓ 5 templates, 1 variation each | 5 built-in + custom, **3 variations each** | ⚠️ Add variations |
-| **TTS** | Message templates only | ElevenLabs adapter + cache | ❌ Missing |
-| **Database Schema** | Partial (missing fields) | Full spec schema (8 tables) | ⚠️ Upgrade needed |
-| **Notifications** | None | Full mobile notification system | ❌ Missing |
-| **Background** | None | Notifee + crash recovery | ❌ Missing |
-| **Calendar** | None | EventKit + Google API | ❌ Missing |
-| **Location** | None | CoreLocation single check | ❌ Missing |
-| **Sound Library** | None | Built-in + import + fallback | ❌ Missing |
-| **Snooze** | None | Tap, custom, chain recompute | ❌ Missing |
-| **Dismissal/Feedback** | Basic HTTP endpoint | Full feedback flow + adjustment | ⚠️ Basic only |
-| **History/Stats** | ✓ Basic hit rate | Full stats, streak, 90-day retention | ⚠️ Incomplete |
-| **Tests** | Scenario harness | Unit + Integration + E2E | ❌ Missing |
-| **Migration System** | None | Versioned migrations | ❌ Missing |
+### Phase 1: Core Foundation (Week 1-2)
+1. Create project structure (`src/lib/`, `src/mobile/`, `tests/`)
+2. Complete database schema + migration system
+3. Refactor and test chain engine
+4. Expand HTTP API endpoints
+5. Implement LLM adapter interface + mock
 
----
+### Phase 2: Feature Core (Week 3-4)
+6. Implement TTS adapter interface + mock
+7. Complete voice personality system
+8. Implement stats calculations
+9. Implement feedback loop
 
-## Key Spec Details to Implement
+### Phase 3: Mobile App (Week 5-6)
+10. React Native project setup
+11. Quick Add screen
+12. Reminder list/detail screens
+13. Notification + snooze UI
+14. Settings screen
 
-### Reminder Types (Section 3)
-- `countdown_event`: drive duration + arrival time → full departure chain
-- `simple_countdown`: no drive, just time remaining → escalating single countdown
-- `morning_routine`: anchor points per routine step (reusable template)
-- `standing_recurring`: repeat daily/weekdays/custom
+### Phase 4: Background & Integrations (Week 7-8)
+15. Notifee background scheduling
+16. Calendar integration (Apple + Google)
+17. Location awareness
+18. DND + quiet hours handling
 
-### Urgency Tiers & Timestamps (Section 2)
-
-For 30-min buffer (full chain):
-| Tier | Minutes Before | Timestamp (arrival 9:00) |
-|------|---------------|--------------------------|
-| calm | 30 | 8:30 AM |
-| casual | 25 | 8:35 AM |
-| pointed | 20 | 8:40 AM |
-| urgent | 15 | 8:45 AM |
-| pushing | 10 | 8:50 AM |
-| firm | 5 | 8:55 AM |
-| critical | 1 | 8:59 AM |
-| alarm | 0 | 9:00 AM |
-
-### Chain Compression Rules (Section 2.3)
-```
-buffer >= 25 min: 8 anchors (full chain)
-buffer 20-24 min: 7 anchors (skip calm)
-buffer 15-19 min: 6 anchors (skip calm/casual)
-buffer 10-14 min: 5 anchors (skip calm/casual/pointed)
-buffer 5-9 min: 3 anchors (firm, critical, alarm)
-buffer 3-4 min: 2 anchors (firm, alarm)
-buffer 1-2 min: 1 anchor (alarm)
-```
-
-### Feedback Loop Adjustment (Section 11.3)
-```typescript
-adjusted_drive_duration = stored_drive_duration + (late_count * 2_minutes)
-// Capped at +15 minutes maximum
-```
-
-### Database Migration Versioning (Section 13.3)
-```sql
--- Migrations must be sequential and versioned
--- Example:
--- schema_v1: initial tables (reminders, anchors, history)
--- schema_v2: add destination_adjustments, user_preferences
--- schema_v3: add calendar_sync, custom_sounds
--- schema_v4: add missing columns (tts_fallback, snoozed_to, origin_lat/lng, etc.)
-```
+### Phase 5: Polish & Testing (Week 9)
+19. Sound library
+20. Integration tests
+21. E2E test setup
+22. CI/CD pipeline
 
 ---
 
-## Reference Implementation
+## Notes
 
-The Python `src/test_server.py` provides working implementations of:
-- `compute_escalation_chain(arrival_time, drive_duration)` — **Port to TypeScript**
-- `parse_reminder_natural(input_text)` — **Port + enhance with LLM adapter**
-- `generate_voice_message(personality, tier, dest, dur, remaining)` — **Port + add 3 variations per tier**
-- `calculate_hit_rate(days)` — **Port to TypeScript**
-- Database schema — **Upgrade to full spec schema with migrations**
+- **Spec mismatch found**: The `chain-engine` implementation in `test_server.py` has incorrect tier logic. The tiers use `drive_duration - X` but should use `minutes_before_arrival` directly.
+  - Current: `('calm', drive_duration)` = 30 min before arrival (correct)
+  - Current: `('casual', drive_duration - 5)` = 25 min before arrival (correct)
+  - But the compressed chains don't match spec
 
----
+- **Database**: Spec TC-04 says "drive_duration > arrival_time" but this should be "drive_duration > (arrival_time - now)" (i.e., departure time is in the past). Current validation is slightly wrong.
 
-## Out of Scope (per spec Section 1.3)
-- Password reset / account management (local-only data in v1)
-- Smart home integration (Hue lights, etc.)
-- Voice reply / spoken snooze ("snooze 5 min")
-- Multi-device sync (future consideration)
-- Bluetooth audio routing (speaker-only in v1)
-- Sound recording / trimming
-- Cloud sound library / purchases
-- Calendar write operations
-- Two-way calendar sync
-- Continuous location tracking
-- Origin address autocomplete
-- ETA-based dynamic drive duration
+- **No mobile framework selected**: The spec mentions React Native OR Flutter but hasn't made a decision. Recommend React Native for faster development given existing Python server.
+
+- **API-only testing**: Current harness tests run against HTTP API. Mobile app will need separate test coverage.
