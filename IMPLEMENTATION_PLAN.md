@@ -6,94 +6,92 @@ This plan maps the specification (`specs/urgent-voice-alarm-app-2026-04-08.spec.
 
 ---
 
+## Current State Analysis (as of 2026-04-08)
+
+### What's Implemented ✅
+- `src/test_server.py`: Basic HTTP server with partial functionality
+  - Core chain engine (`compute_escalation_chain`) - has bugs
+  - Keyword parser (`parse_reminder_natural`) - basic regex
+  - Voice message templates (5 personalities)
+  - Partial database schema (missing ~10 fields)
+  - Hit rate calculation
+  - Basic endpoints: `/health`, `/chain`, `/reminders`, `/parse`, `/voice/message`, `/history`, `/anchors/fire`
+- `scenarios/`: 15 YAML scenario files ready for validation
+
+### What's Missing ❌
+- `src/lib/` directory with adapter interfaces and implementations
+- `harness/scenario_harness.py` - validation harness
+- `tests/` directory with unit tests
+- Database schema incomplete (missing fields per spec Section 13)
+- Chain engine bugs (doesn't match TC-01/TC-02/TC-03)
+- Missing adapters: LLM, TTS, Calendar, Location, Notification, Scheduler
+- Snooze/re-computation logic
+- Feedback loop implementation
+- Sound library
+- Mobile app UI
+
+---
+
 ## Phase 0: Quick Wins (Days 1-2)
 
 ### 0.1 Database Schema Completeness
 **Priority:** Critical | **Spec:** Section 13
 
-Current `init_db()` in `test_server.py` is incomplete. Add missing schema elements:
+**Current Gap:** `init_db()` in `test_server.py` missing ~10 fields/tables.
 
+**Missing from reminders table:**
 ```sql
--- reminders table additions:
 origin_lat REAL,
 origin_lng REAL,
 origin_address TEXT,
 custom_sound_path TEXT,
 calendar_event_id TEXT,
-reminder_type TEXT DEFAULT 'countdown_event'
-
--- anchors table additions:
-tts_fallback INTEGER DEFAULT 0,
-snoozed_to TEXT
-
--- history table additions:
-actual_arrival TEXT,
-missed_reason TEXT
-
--- New tables needed:
-CREATE TABLE destination_adjustments (
-  destination TEXT PRIMARY KEY,
-  adjustment_minutes INTEGER DEFAULT 0,
-  hit_count INTEGER DEFAULT 0,
-  miss_count INTEGER DEFAULT 0,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE calendar_sync (
-  calendar_type TEXT PRIMARY KEY,
-  last_sync_at TEXT,
-  sync_token TEXT,
-  is_connected INTEGER DEFAULT 0
-);
-
-CREATE TABLE custom_sounds (
-  id TEXT PRIMARY KEY,
-  filename TEXT NOT NULL,
-  original_name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  file_path TEXT NOT NULL,
-  duration_seconds REAL,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE schema_version (
-  version INTEGER PRIMARY KEY,
-  applied_at TEXT NOT NULL
-);
+-- existing but incomplete:
+-- missing snoozed_to, tts_fallback, actual_arrival, missed_reason, etc.
 ```
 
+**Missing tables:**
+- `schema_version` — for migration tracking
+- `calendar_sync` — for Apple/Google sync state
+- `custom_sounds` — for imported audio files
+
 **Tasks:**
-- [ ] Enhance `init_db()` with full schema
-- [ ] Enable foreign keys (`PRAGMA foreign_keys = ON`)
-- [ ] Enable WAL mode (`PRAGMA journal_mode = WAL`)
+- [ ] Enhance `init_db()` with full schema from spec Section 13
+- [ ] Add `PRAGMA foreign_keys = ON`
+- [ ] Add `PRAGMA journal_mode = WAL`
 - [ ] Add in-memory mode support (`?mode=memory`)
 
 ---
 
-### 0.2 Chain Engine Enhancements
+### 0.2 Chain Engine Fixes
 **Priority:** Critical | **Spec:** Section 2.3
 
-Current `compute_escalation_chain()` has bugs. Per TC-01 acceptance criteria:
-> Chain for "30 min drive, arrive 9am" produces 8 anchors: 8:30, 8:35, 8:40, 8:45, 8:50, 8:55, 8:59, 9:00
+**Current Gap:** `compute_escalation_chain()` doesn't match spec anchor generation rules.
 
-Current implementation calculates minutes incorrectly. Fix anchor generation:
+**Spec says:**
+| Buffer | Anchors | Start Tier | Timestamps |
+|--------|--------|------------|------------|
+| ≥25 min | 8 | calm (T-30) | departure, T-25, T-20, T-15, T-10, T-5, T-1, T-0 |
+| 20-24 min | 7 | casual (T-25) | T-25, T-20, T-15, T-10, T-5, T-1, T-0 |
+| 15-19 min | 6 | pointed (T-20) | T-20, T-15, T-10, T-5, T-1, T-0 |
+| 10-14 min | 5 | urgent (T-15) | T-15, T-10, T-5, T-1, T-0 |
+| 5-9 min | 3 | firm (T-5) | T-5, T-1, T-0 |
+| 1-4 min | 2 | critical (T-1) | T-1, T-0 |
+| 0 min | 1 | alarm | T-0 |
 
 **Tasks:**
-- [ ] Implement `get_next_unfired_anchor(reminder_id)` — returns earliest unfired anchor
-- [ ] Implement `shift_anchors(anchor_list, offset_minutes)` — shifts timestamps for snooze
-- [ ] Fix chain generation to match TC-01/TC-02/TC-03 exactly
+- [ ] Fix `compute_escalation_chain()` to match exact timestamps above
+- [ ] Implement `get_next_unfired_anchor(reminder_id)` function
+- [ ] Implement `shift_anchors(anchor_list, offset_minutes)` for snooze
 - [ ] Add validation: reject if `drive_duration > (arrival_time - now)`
+- [ ] Add anchor `snoozed_to` field handling
+- [ ] Add anchor `tts_fallback` boolean
 
-**Expected behavior per spec:**
-| Buffer | Anchors | Start Tier |
-|--------|---------|------------|
-| ≥25 min | 8 | calm (T-30) |
-| 20-24 min | 7 | casual (T-25) |
-| 15-19 min | 6 | pointed (T-20) |
-| 10-14 min | 5 | urgent (T-15) |
-| 5-9 min | 3 | firm (T-5), critical, alarm |
-| 1-4 min | 2 | critical (T-1), alarm |
-| 0 min | 1 | alarm |
+**Test Cases to Pass:**
+- [ ] TC-01: 8 anchors for "30 min drive, arrive 9am" → 8:30, 8:35, 8:40, 8:45, 8:50, 8:55, 8:59, 9:00
+- [ ] TC-02: 5 anchors for "15 min drive, arrive 9am" → 8:45, 8:50, 8:55, 8:59, 9:00
+- [ ] TC-03: 3 anchors for "3 min drive, arrive 9am" → 8:57, 8:59, 9:00
+- [ ] TC-04: Invalid chain rejected (drive > arrival - now)
 
 ---
 
@@ -102,18 +100,48 @@ Current implementation calculates minutes incorrectly. Fix anchor generation:
 ### 1.1 Create Scenario Harness
 **Priority:** Critical | **Location:** `harness/scenario_harness.py`
 
+**Existing Resources:**
+- 15 YAML scenarios in `scenarios/` directory
+- `scenarios/README.md` documents the expected format
+- Scenario files include: chain-*, parse-*, voice-*, history-*, stats-*, reminder-* tests
+
 **Tasks:**
 - [ ] Parse YAML scenario files from `/var/otto-scenarios/{project}/`
 - [ ] Execute HTTP API sequences via `requests` library
-- [ ] Support variable interpolation (`${variable}` syntax)
+- [ ] Support variable interpolation (`${variable}` syntax) from `env` block
 - [ ] Validate assertions:
-  - `http_status` — verify HTTP response code
-  - `db_record` — verify SQLite records exist
-  - `llm_judge` — call LLM to evaluate output quality
-- [ ] Report pass/fail per scenario
+  - `http_status` — verify HTTP response code and body fields
+  - `db_record` — verify SQLite records exist via direct query
+  - `llm_judge` — call LLM to evaluate output quality (uses `model` field)
+- [ ] Report pass/fail per scenario with detailed output
 - [ ] Handle `sudo mkdir` for scenario directory creation
 
-**Command:** `sudo python3 harness/scenario_harness.py --project otto-matic`
+**Command:** `sudo python3 harness/scenario_harness.py --project urgent-alarm`
+
+**Scenario Format Reference (from existing files):**
+```yaml
+name: chain-full-30min-buffer
+trigger:
+  type: api_sequence
+  steps:
+    - POST /reminders { ... }
+env:
+  base_url: http://localhost:8090
+  arrival: "2026-04-09T09:00:00"
+assertions:
+  - type: http_status
+    path: /reminders
+    method: POST
+    body: { ... }
+    expect: 201
+  - type: db_record
+    table: anchors
+    conditions: { fired: 0 }
+  - type: llm_judge
+    model: sonnet-4-20250514
+    prompt: |
+      ...
+```
 
 ---
 
@@ -122,10 +150,25 @@ Current implementation calculates minutes incorrectly. Fix anchor generation:
 
 **Tasks:**
 - [ ] `tests/test_chain_engine.py` — all 6 test cases from Section 2.5
+  - TC-01: Full chain (≥25 min) → 8 anchors
+  - TC-02: Compressed chain (10-24 min) → 5 anchors
+  - TC-03: Minimum chain (≤5 min) → 3 anchors
+  - TC-04: Invalid chain rejection
+  - TC-05: `get_next_unfired_anchor` recovery
+  - TC-06: Chain determinism (same inputs = same outputs)
 - [ ] `tests/test_parser.py` — all 7 test cases from Section 3.5
+  - TC-01: Full NL parse → destination, arrival_time, drive_duration
+  - TC-02: Simple countdown ("dryer in 3 min")
+  - TC-03: Tomorrow date resolution
+  - TC-04: LLM API failure fallback
+  - TC-05: Manual field correction
+  - TC-06: Unintelligible input rejection
+  - TC-07: Mock adapter in tests
 - [ ] `tests/test_voice_messages.py` — message template tests
+  - All 5 personalities × 8 tiers
+  - Message variation (3+ distinct phrasings)
 - [ ] `tests/test_stats.py` — hit rate, streak calculations
-- [ ] Use in-memory SQLite for isolation
+- [ ] Use in-memory SQLite for isolation (`?mode=memory`)
 
 ---
 
