@@ -111,7 +111,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 > **Implementation notes:** Implemented in `src/test_server.py:190-223`. Added `get_next_unfired_anchor()` function and `snoozed_to`/`tts_fallback` columns to anchors table schema. Verified with GET /anchors/{reminder_id} endpoint.
 
-#### 3. LLM Adapter Interface & Mock
+#### 3. LLM Adapter Interface & Mock ✅ COMPLETED
 **Spec Ref:** Section 3.3, 3.4, 3.5
 **Task:** Create mock-able LLM adapter for parsing
 - Define `ILanguageModelAdapter` interface
@@ -120,6 +120,8 @@ This document maps the specification requirements to implementation tasks, prior
 - Keyword extraction fallback already in `test_server.py` (lines 193-296) - integrate
 - **Acceptance Criteria:** Mock returns fixture without API call, fallback on API failure
 **Files:** `src/backend/adapters/llm_adapter.py`, `src/backend/adapters/mock_llm.py`
+
+> **Implementation notes:** Implemented interface in `src/backend/adapters/llm_adapter.py` with `ILanguageModelAdapter`, `ParsedReminder`, and `LLMParseError`. Created MiniMax adapter in `minimax_adapter.py` with env var configuration. Mock adapter in `mock_llm.py` returns predefined fixtures with keyword matching and fallback to basic parsing. Verified with import tests.
 
 #### 4. Reminder Parser Integration
 **Spec Ref:** Section 3.3, 3.4, 3.5
