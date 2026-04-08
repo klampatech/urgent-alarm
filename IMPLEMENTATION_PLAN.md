@@ -182,7 +182,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 > **Implementation notes:** Implemented +15 min cap in feedback loop at `src/test_server.py:765-776`. Changed from unlimited accumulation to `min(current_adj + 2, 15)`.
 
-#### 8. Snooze & Dismissal Flow
+#### 8. Snooze & Dismissal Flow ✅ COMPLETED
 **Spec Ref:** Section 9.3, 9.4
 **Task:** Implement full snooze interaction flow
 - Tap = 1 min snooze with TTS confirmation
@@ -192,6 +192,8 @@ This document maps the specification requirements to implementation tasks, prior
 - Persist snooze state across app restarts
 - **Acceptance Criteria:** All 6 test scenarios pass
 **Files:** `src/backend/services/snooze_handler.py`, `src/backend/services/dismissal_handler.py`
+
+> **Implementation notes:** Implemented SnoozeHandler in `snooze_handler.py` with tap (1 min) and tap-hold (custom) snooze. Chain recomputation returns remaining unfired anchors. Implemented DismissalHandler in `dismissal_handler.py` with swipe-to-dismiss, feedback prompt options, and history recording. Verified with import tests.
 
 ---
 
