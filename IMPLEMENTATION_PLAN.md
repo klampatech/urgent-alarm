@@ -26,7 +26,7 @@ This document maps the specification requirements to implementation tasks, prior
 - ✅ SQLite database with 5 tables (reminders, anchors, history, destination_adjustments, user_preferences) - simplified schema vs spec
 - ✅ Chain engine (`compute_escalation_chain`, lines 103-179) - basic anchor generation with buffer-based compression
 - ✅ Keyword parser (`parse_reminder_natural`, lines 193-296) - regex-based fallback extraction
-- ✅ Voice personality templates (5 personalities, lines 299-350) - single message template per tier
+- ✅ Voice personality templates (6 personalities: coach, assistant, best_friend, no_nonsense, calm, custom, lines 299-350) - single message template per tier
 - ✅ Basic hit rate calculation (`calculate_hit_rate`, lines 370-389)
 - ✅ HTTP test endpoints (8 endpoints for harness validation)
 
