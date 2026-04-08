@@ -4,429 +4,475 @@
 
 **Last Updated:** 2026-04-08
 
-**Current State:** Python test server (`src/test_server.py`) implements ~30% of spec.
-
-### ✅ Implemented
-- Basic escalation chain engine (`compute_escalation_chain`) — working correctly for 30min (8 anchors)
-- Keyword-based natural language parser (`parse_reminder_natural`) — partial, has bugs
-- 5 voice personality message templates (`generate_voice_message`) — all 5 personalities
-- Basic SQLite schema (4 tables: reminders, anchors, history, destination_adjustments)
-- Hit rate calculation (`calculate_hit_rate`)
-- HTTP API endpoints for testing
-
-### ❌ Bugs / Issues Found
-1. **Parser crash:** `"dryer in 3 min"` causes `IndexError: no such group`
-2. **Parser partial failure:** `"meeting tomorrow 2pm, 20 min drive"` fails to parse time (arrival_time=None)
-3. **Parser partial failure:** `"Parker Dr 9am, 30 min drive"` fails to parse time (arrival_time=None)
-4. **Validation incomplete:** `validate_chain` doesn't reject `drive_duration > time_to_arrival` (spec TC-04)
-5. **Anchor ordering issue:** For 15min buffer, critical (T-1) appears before alarm (T-0) in sorted output (though functionally okay)
-6. **Missing DELETE endpoint:** No `/reminders/{id}` or `/reminders/{id}/anchors` endpoint for cascade delete test
-7. **Missing origin columns:** Schema lacks `origin_lat`, `origin_lng`, `origin_address` columns
-8. **Missing `snoozed_to` column:** Anchors don't have snooze timestamp tracking
-9. **Missing schema versioning:** No migration system or schema_version table
+**Current State:** Python test server (`src/test_server.py`) implements core engine ~35% of spec. Needs significant work on bugs, schema completeness, and adapter interfaces.
 
 ---
 
-## Gap Analysis
+## Gap Analysis Summary
 
-### Implemented Components
+### Spec Coverage by Section
 
-| Component | Status | Spec Section | Notes |
-|-----------|--------|--------------|-------|
-| Chain engine basic | ✅ Working | §2 | 30min buffer: 8 anchors correct |
-| Chain 15min | ⚠️ Buggy | §2 | 5 anchors but order issue (minor) |
-| Chain 3min | ⚠️ Buggy | §2 | 2 anchors instead of 3 |
-| Chain validation | ❌ Missing | §2 | Doesn't reject drive > arrival |
-| Keyword parser | ⚠️ Partial | §3 | Crashes on simple countdown |
-| 5 voice personalities | ✅ Working | §10 | All templates exist |
-| SQLite schema basic | ⚠️ Partial | §13 | Missing columns |
-| Hit rate | ✅ Working | §11 | Correct calculation |
-| History record | ✅ Working | §11 | Partial |
-| Feedback loop | ⚠️ Partial | §11 | Records but not applied |
-| Cascade delete | ❌ Missing | §13 | No DELETE endpoint |
-
-### Missing Components (Full Spec)
-
-| Component | Priority | Spec Section |
-|-----------|----------|--------------|
-| Database schema full alignment | P0 | §13 |
-| LLM adapter interface | P0 | §3 |
-| TTS adapter interface | P0 | §4 |
-| Fix parser bugs | P0 | §3 |
-| Fix chain validation | P0 | §2 |
-| DELETE endpoint + cascade | P0 | §13 |
-| `get_next_unfired_anchor` | P1 | §2 |
-| Snooze chain recomputation | P1 | §9 |
-| Message variations (3+ per tier) | P1 | §10 |
-| Notification/alarm behavior | P1 | §5 |
-| Background scheduling (Notifee) | P2 | §6 |
-| Calendar integration | P2 | §7 |
-| Location awareness | P2 | §8 |
-| Sound library | P2 | §12 |
-| Streak counter | P2 | §11 |
-| Common miss window | P2 | §11 |
-| Quiet hours / DND | P2 | §5 |
-| Chain overlap queue | P2 | §5 |
+| Section | Topic | Implementation Status | Notes |
+|---------|-------|----------------------|-------|
+| §2 | Escalation Chain Engine | ⚠️ Partial | 8 anchors work, 3min buffer broken, validation incomplete |
+| §3 | Reminder Parsing & Creation | ❌ Broken | Parser crashes on simple countdown, fails on multiple formats |
+| §4 | Voice & TTS Generation | ⚠️ Partial | Templates exist, but only 1 per tier (need 3+), no TTS adapter |
+| §5 | Notification & Alarm Behavior | ❌ Missing | Not implemented |
+| §6 | Background Scheduling | ❌ Missing | Not implemented |
+| §7 | Calendar Integration | ❌ Missing | Not implemented |
+| §8 | Location Awareness | ❌ Missing | Not implemented |
+| §9 | Snooze & Dismissal Flow | ❌ Missing | Snooze not implemented |
+| §10 | Voice Personality System | ⚠️ Partial | 5 personalities, but no variations, no custom prompts |
+| §11 | History, Stats & Feedback Loop | ⚠️ Partial | Hit rate works, streak/miss-window missing, feedback loop partial |
+| §12 | Sound Library | ❌ Missing | Not implemented |
+| §13 | Data Persistence | ⚠️ Partial | Schema incomplete, no migrations, no cascade delete |
 
 ---
 
-## Phase 1: Critical Fixes (P0)
+## Critical Bugs (P0)
 
-### 1.1 Fix Parser Bug
-**Spec:** Section 3.5, TC-02
-
-**Issue:** `"dryer in 3 min"` causes IndexError.
-
-**Root Cause:** Line 266 in `parse_reminder_natural`:
+### Bug 1: Parser Crash on Simple Countdown
+**Spec:** Section 3.5, TC-02  
+**File:** `src/test_server.py`  
+**Issue:** `"dryer in 3 min"` causes `IndexError: no such group`  
+**Root Cause:** Line ~266 in `parse_reminder_natural`:
 ```python
 minute = int(match.group(2)) if match.group(2) else 0
 ```
 The regex `r'in\s+(\d+)\s*(?:minute|min)'` only has one capture group, but code tries to access `group(2)`.
 
-**Fix:**
-```python
-# For relative time "in X minutes", use the first group
-minutes = int(match.group(1))
-```
-
-**Files:** `src/test_server.py`
+**Fix Required:** Separate handling for relative time pattern with single capture group.
 
 ---
 
-### 1.2 Fix Time Parsing for Shortened Input
-**Spec:** Section 3.5, TC-01, TC-03
+### Bug 2: Parser Fails Time Extraction Without "at"
+**Spec:** Section 3.5, TC-01, TC-03  
+**File:** `src/test_server.py`  
+**Issue:** `"Parker Dr 9am, 30 min drive"` and `"meeting tomorrow 2pm, 20 min drive"` fail to parse time  
+**Root Cause:** The regex `r'at\s+(\d{1,2}):?(\d{2})?\s*(am|pm)'` requires "at" keyword.
 
-**Issue:** `"Parker Dr 9am, 30 min drive"` and `"meeting tomorrow 2pm, 20 min drive"` fail to parse time.
-
-**Root Cause:** The regex `r'at\s+(\d{1,2}):?(\d{2})?\s*(am|pm)'` requires "at" keyword. These inputs don't have "at".
-
-**Fix:** Update regex patterns to handle:
+**Fix Required:** Update regex patterns to handle:
 - `"Xam"` / `"Xpm"` without "at"
 - `"tomorrow Xpm"` with "tomorrow" prefix
 
-**Files:** `src/test_server.py`
-
 ---
 
-### 1.3 Fix Chain Validation
-**Spec:** Section 2.3, TC-04
+### Bug 3: Chain Validation Incomplete
+**Spec:** Section 2.3, TC-04, Req #8  
+**File:** `src/test_server.py`  
+**Issue:** `drive_duration=120, arrival=9am` should be rejected but isn't  
+**Spec Requirement:** "arrival_time > departure_time + minimum_drive_time"
 
-**Issue:** `drive_duration=120, arrival=9am` should be rejected but isn't.
-
-**Spec Requirement:** "arrival_time > departure_time + minimum_drive_time" validation.
-
-**Fix:** Add validation in `validate_chain`:
+**Fix Required:** Add validation that departure_time > now in `validate_chain()`:
 ```python
-# departure_time must be in the future
 departure_time = arrival_time - timedelta(minutes=drive_duration)
 if departure_time <= datetime.now():
     return {'valid': False, 'error': 'departure_time_in_past'}
-
-# Actually, the spec says: arrival_time > departure_time + minimum_drive_time
-# This is tautological since minimum_drive_time >= 0
-# The real check: departure_time > now (not arrival)
 ```
 
-Wait, re-reading TC-04: "Given arrival_time = 9:00 AM and drive_duration = 120 minutes"
-- Departure would be 7:00 AM (in the past!)
-- So `departure_time <= now` should reject it.
-
-**Files:** `src/test_server.py`
-
 ---
 
-### 1.4 Add DELETE Endpoint for Cascade Delete
-**Spec:** Section 13.5, TC-03
-
-**Issue:** No way to delete reminders to test cascade.
-
-**Tasks:**
-- [ ] Add `DELETE /reminders/{id}` endpoint
-- [ ] Enable `PRAGMA foreign_keys = ON` in `init_db()`
-- [ ] Verify cascade delete works
-
-**Files:** `src/test_server.py`
-
----
-
-### 1.5 Complete Database Schema
-**Spec:** Section 13.2
-
-**Current Missing Columns:**
-- [ ] `reminders`: origin_lat, origin_lng, origin_address, custom_sound_path, calendar_event_id
-- [ ] `anchors`: tts_fallback, snoozed_to
-- [ ] `history`: actual_arrival, missed_reason
-- [ ] `user_preferences`: updated_at
-- [ ] `destination_adjustments`: updated_at
-- [ ] Add `calendar_sync` table
-- [ ] Add `custom_sounds` table
-- [ ] Add `schema_version` table
-
-**Files:** `src/test_server.py`
-
----
-
-## Phase 2: Core Engine Enhancements (P1)
-
-### 2.1 Chain Engine Full Spec Compliance
-**Spec:** Section 2.3, TC-03
-
-**Issue:** 3min buffer produces 2 anchors instead of 3.
-
+### Bug 4: 3-Minute Buffer Produces Wrong Anchor Count
+**Spec:** Section 2.5, TC-03  
+**File:** `src/test_server.py`  
+**Issue:** 3min buffer produces 2 anchors instead of required 3  
 **Spec TC-03:** "3 anchors are created: T-3 (firm), T-1 (critical), T-0 (alarm)"
 
-**Current:** `[{'firm': T-2}, {'alarm': T-0}]`
+**Current Output:** `[{'firm': T-2}, {'alarm': T-0}]`  
+**Required Output:** `[{'firm': T-3}, {'critical': T-1}, {'alarm': T-0}]`
 
-**Fix:** For buffer <= 5, include T-1 (critical) before alarm.
-
-**Files:** `src/test_server.py`
-
----
-
-### 2.2 Add `get_next_unfired_anchor`
-**Spec:** Section 2.3, Req #6
-
-**Tasks:**
-- [ ] Add `GET /reminders/{id}/next-anchor` endpoint
-- [ ] Return earliest unfired anchor for scheduler recovery
-
-**Files:** `src/test_server.py`
+**Fix Required:** Update `compute_escalation_chain()` logic for buffer <= 5.
 
 ---
 
-### 2.3 Add `get_next_unfired_anchor`
-**Spec:** Section 2.3, Req #6
+## Schema Completeness (P0)
 
-**Tasks:**
-- [ ] Add `GET /reminders/{id}/next-anchor` endpoint
-- [ ] Return earliest unfired anchor for scheduler recovery
-- [ ] Handle case where all anchors fired (return null)
+### Missing Columns in `reminders` Table
+| Column | Type | Notes |
+|--------|------|-------|
+| `origin_lat` | REAL | Location origin latitude |
+| `origin_lng` | REAL | Location origin longitude |
+| `origin_address` | TEXT | User-specified origin address |
+| `custom_sound_path` | TEXT | Path to custom audio file |
+| `calendar_event_id` | TEXT | Reference to calendar event if calendar-sourced |
+| `reminder_type` | TEXT | Already exists, verify enum values |
 
-**Files:** `src/test_server.py`
+### Missing Columns in `anchors` Table
+| Column | Type | Notes |
+|--------|------|-------|
+| `tts_fallback` | BOOLEAN | True if TTS failed, using fallback |
+| `snoozed_to` | TEXT | New timestamp if snoozed |
+
+### Missing Columns in `history` Table
+| Column | Type | Notes |
+|--------|------|-------|
+| `actual_arrival` | TEXT | Nullable, set when resolved |
+| `missed_reason` | TEXT | background_task_killed, dnd_suppressed, user_dismissed |
+
+### Missing Tables
+- [ ] `user_preferences` needs `updated_at` column
+- [ ] `destination_adjustments` needs `updated_at` column
+- [ ] `calendar_sync` table (apple, google sync state)
+- [ ] `custom_sounds` table (imported audio files)
+- [ ] `schema_version` table (for migrations)
+
+### Database Settings Missing
+- [ ] Enable `PRAGMA foreign_keys = ON`
+- [ ] Enable `PRAGMA journal_mode = WAL`
 
 ---
 
-### 2.4 Snooze Chain Recomputation
-**Spec:** Section 9.3, TC-03
+## Missing HTTP Endpoints (P0)
 
-**Spec Requirement:** After snooze, shift remaining anchors by snooze duration.
-
-**Example:** Snooze at 8:45 with 3-min snooze → remaining anchors: 8:48, 8:53, 8:59, 9:00
-
-**Tasks:**
-- [ ] Add `POST /anchors/{id}/snooze` with duration parameter
-- [ ] Compute new timestamps for all unfired anchors
-- [ ] Update anchor records with `snoozed_to`
-- [ ] TTS confirmation: "Okay, snoozed 3 minutes"
-
-**Files:** `src/test_server.py`, `src/lib/snooze.py`
+| Endpoint | Method | Purpose | Spec Section |
+|----------|--------|---------|-------------|
+| `/reminders/{id}` | DELETE | Delete reminder + cascade anchors | §13, TC-03 |
+| `/reminders/{id}/next-anchor` | GET | Get next unfired anchor for recovery | §2, Req #6 |
+| `/anchors/{id}/snooze` | POST | Snooze anchor with duration | §9 |
+| `/adjustments/{destination}` | GET | Get destination adjustment | §11 |
 
 ---
 
-### 2.5 Voice Personality Message Variations
-**Spec:** Section 10.3, TC-05
+## Adapter Interfaces (P0)
 
-**Spec Requirement:** Minimum 3 message variations per tier per personality.
+### LLM Adapter Interface
+**Spec:** Section 3.3  
+**Purpose:** Mock-able natural language parsing adapter
+
+**Required Files:**
+- `src/lib/adapters/__init__.py`
+- `src/lib/adapters/llm_adapter.py` — `ILanguageModelAdapter` abstract class
+
+**Implementations:**
+- `MockLLMAdapter` — returns predefined fixture responses
+- `MiniMaxAdapter` — MiniMax API endpoint
+- `AnthropicAdapter` — Anthropic API endpoint
+
+**Environment:** `LLM_ADAPTER=minimax|anthropic|mock`
+
+**Fallback:** Keyword extraction when LLM fails
+
+---
+
+### TTS Adapter Interface
+**Spec:** Section 4.3  
+**Purpose:** Mock-able text-to-speech adapter
+
+**Required Files:**
+- `src/lib/adapters/tts_adapter.py` — `ITTSAdapter` abstract class
+- `src/lib/tts_cache.py` — cache management
+
+**Implementations:**
+- `MockTTSAdapter` — writes silent audio file
+- `ElevenLabsAdapter` — ElevenLabs API
+
+**Environment:** `TTS_ADAPTER=elevenlabs|mock`
+
+**Cache Path:** `/tts_cache/{reminder_id}/{anchor_id}.mp3`
+
+---
+
+## Phase 1: Core Engine Fixes
+
+### 1.1 Fix Parser Bug — Simple Countdown
+- [ ] Separate relative time pattern handling (single capture group)
+- [ ] Test: `"dryer in 3 min"` parses without crash
+- [ ] Test: `reminder_type = "simple_countdown"`, `drive_duration = 0`
+
+### 1.2 Fix Parser Bug — Time Without "at"
+- [ ] Add regex patterns for: `Xam`, `Xpm`, `X:XXam`, `X:XXpm`
+- [ ] Handle "tomorrow" prefix without "at"
+- [ ] Test: `"Parker Dr 9am, 30 min drive"` parses correctly
+- [ ] Test: `"meeting tomorrow 2pm, 20 min drive"` parses correctly
+
+### 1.3 Fix Chain Validation
+- [ ] Add `departure_time <= datetime.now()` check
+- [ ] Test: `drive_duration=120, arrival=9am` returns 400
+
+### 1.4 Fix 3-Minute Chain
+- [ ] Update `compute_escalation_chain()` for buffer <= 5
+- [ ] Test: 3 anchors for 3min buffer: T-3, T-1, T-0
+
+---
+
+## Phase 2: Database & Schema
+
+### 2.1 Complete Database Schema
+- [ ] Add missing `reminders` columns
+- [ ] Add missing `anchors` columns
+- [ ] Add missing `history` columns
+- [ ] Add `user_preferences.updated_at`
+- [ ] Add `destination_adjustments.updated_at`
+- [ ] Create `calendar_sync` table
+- [ ] Create `custom_sounds` table
+- [ ] Create `schema_version` table
+
+### 2.2 Enable Foreign Keys & WAL
+- [ ] Add `PRAGMA foreign_keys = ON` in `init_db()`
+- [ ] Add `PRAGMA journal_mode = WAL`
+
+### 2.3 Add DELETE Endpoint
+- [ ] Add `DELETE /reminders/{id}`
+- [ ] Test cascade delete: deleting reminder deletes anchors
+
+### 2.4 Add Next-Anchor Endpoint
+- [ ] Add `GET /reminders/{id}/next-anchor`
+- [ ] Return earliest unfired anchor
+- [ ] Handle: all fired → return null
+
+---
+
+## Phase 3: Voice & Message System
+
+### 3.1 Expand Message Variations
+**Spec:** Section 10.3, TC-05  
+**Requirement:** Minimum 3 message variations per tier per personality
+
+**Current:** 1 template per tier  
+**Required:** 3+ templates per tier
 
 **Tasks:**
-- [ ] Expand each personality's templates to 3+ variations
-- [ ] Add random or round-robin selection
+- [ ] Expand `VOICE_PERSONALITIES` dict with 3 variations per tier
+- [ ] Add random or round-robin selection logic
 - [ ] Test: 3 calls → at least 2 distinct messages
 
-**Files:** `src/test_server.py`, `tests/test_voice.py`
-
----
-
-## Phase 3: Adapter Interfaces (P0)
-
-### 3.1 LLM Adapter Interface
-**Spec:** Section 3.3
+### 3.2 Custom Voice Prompts
+**Spec:** Section 10.3, Req #3  
+**Requirement:** Custom mode accepts user-written prompt (max 200 chars)
 
 **Tasks:**
-- [ ] Create `src/lib/adapters/llm_adapter.py`
-- [ ] Define `ILanguageModelAdapter` abstract class
-- [ ] Implement `MockLLMAdapter` for testing
-- [ ] Implement `MiniMaxAdapter`
-- [ ] Implement `AnthropicAdapter`
-- [ ] Environment variable: `LLM_ADAPTER=minimax|anthropic|mock`
-- [ ] Integrate with fallback to keyword extraction
-
-**Files:** `src/lib/adapters/llm_adapter.py`
+- [ ] Add "custom" personality mode
+- [ ] Append custom prompt to message generation system prompt
+- [ ] Test: Custom prompt modifies message tone
 
 ---
 
-### 3.2 TTS Adapter Interface
-**Spec:** Section 4.3
+## Phase 4: Snooze & Dismissal
+
+### 4.1 Snooze Chain Recomputation
+**Spec:** Section 9.3, TC-03  
+**Requirement:** After snooze, shift remaining anchors by snooze duration
 
 **Tasks:**
-- [ ] Create `src/lib/adapters/tts_adapter.py`
-- [ ] Define `ITTSAdapter` abstract class
-- [ ] Implement `MockTTSAdapter`
-- [ ] Implement `ElevenLabsAdapter`
-- [ ] Create `src/lib/tts_cache.py`
-- [ ] Environment variable: `TTS_ADAPTER=elevenlabs|mock`
-- [ ] Fallback: mark `tts_fallback=true`
+- [ ] Add `POST /anchors/{id}/snooze` endpoint
+- [ ] Compute new timestamps for unfired anchors
+- [ ] Update anchor records with `snoozed_to`
+- [ ] Return TTS confirmation text
 
-**Files:** `src/lib/adapters/tts_adapter.py`, `src/lib/tts_cache.py`
+**Example:** Snooze at 8:45 with 3-min → 8:48, 8:53, 8:59, 9:00
 
----
+### 4.2 Snooze Duration Picker
+**Spec:** Section 9.3, Req #2  
+**Options:** 1, 3, 5, 10, 15 minutes
 
-## Phase 4: User Interaction (P1)
-
-### 4.1 Notification & Alarm Behavior
-**Spec:** Section 5.3
-
-**Tasks:**
-- [ ] 4-tier notification sounds
-- [ ] DND awareness
-- [ ] Quiet hours (default 10pm–7am)
-- [ ] Queue overdue anchors, drop if >15min
-- [ ] Chain overlap serialization
-- [ ] T-0 alarm loop
-
-**Files:** `src/lib/notifications.py`
-
----
-
-### 4.2 Dismissal Feedback
-**Spec:** Section 9.3
+### 4.3 Dismissal Feedback
+**Spec:** Section 9.4  
+**Requirement:** Feedback prompt on dismissal
 
 **Tasks:**
 - [ ] Add `feedback_type` options: timing_right, left_too_early, left_too_late, other
-- [ ] Apply adjustments on reminder creation
-- [ ] TTS: "You missed {destination} — was timing right?"
-
-**Files:** `src/lib/dismissal.py`
+- [ ] Store feedback in history
+- [ ] Return adjustment applied via TTS
 
 ---
 
-## Phase 5: System Integration (P2)
+## Phase 5: Stats & Feedback Loop
 
-### 5.1 Background Scheduling
-**Spec:** Section 6.3
-
-**Note:** Requires React Native; prepare Python layer.
-
-**Tasks:**
-- [ ] Document Notifee API surface
-- [ ] Implement recovery scan logic
-
-**Files:** `src/lib/scheduler.py`
-
----
-
-### 5.2 Calendar Integration
-**Spec:** Section 7.3
+### 5.1 Streak Counter
+**Spec:** Section 11.3, Req #4  
+**Requirement:** Increment on hit, reset on miss for recurring reminders
 
 **Tasks:**
-- [ ] Create `src/lib/adapters/calendar_adapter.py`
-- [ ] Define `ICalendarAdapter` interface
-- [ ] Document EventKit/Google Calendar API surface
+- [ ] Add `streak_count` to reminder or compute from history
+- [ ] Increment on outcome='hit' for recurring
+- [ ] Reset on outcome='miss'
 
-**Files:** `src/lib/adapters/calendar_adapter.py`
-
----
-
-### 5.3 Location Awareness
-**Spec:** Section 8.3
+### 5.2 Common Miss Window
+**Spec:** Section 11.3, Req #3  
+**Requirement:** Identify most frequently missed urgency tier
 
 **Tasks:**
-- [ ] Create `src/lib/location.py`
-- [ ] 500m geofence comparison
-- [ ] Fire firm/critical if at origin
+- [ ] Query history for missed anchors by tier
+- [ ] Return most common missed tier
 
-**Files:** `src/lib/location.py`
-
----
-
-## Phase 6: Analytics (P2)
-
-### 6.1 Stats Enhancement
-**Spec:** Section 11.3
+### 5.3 Feedback Loop Adjustment
+**Spec:** Section 11.3, Req #2  
+**Requirement:** `adjusted_drive_duration = stored + (late_count * 2)`, capped at +15
 
 **Tasks:**
-- [ ] Implement streak counter
-- [ ] Implement common miss window
-- [ ] 90-day retention
-
-**Files:** `src/lib/stats.py`
-
----
-
-### 6.2 Feedback Loop
-**Spec:** Section 11.3
-
-**Tasks:**
-- [ ] Apply `adjustment_minutes` on reminder creation
-- [ ] Cap at +15 minutes
+- [ ] Apply adjustment on reminder creation for known destinations
 - [ ] Add `GET /adjustments/{destination}` endpoint
-
-**Files:** `src/lib/feedback_loop.py`
-
----
-
-## Phase 7: Sound Library (P2)
-
-### 7.1 Sound Library
-**Spec:** Section 12.3
-
-**Tasks:**
-- [ ] Create `src/lib/sound_library.py`
-- [ ] Bundle 5 built-in sounds per category
-- [ ] Custom import (MP3, WAV, M4A, max 30s)
-- [ ] Corrupted file fallback
-
-**Files:** `src/lib/sound_library.py`
+- [ ] Add `GET /adjustments/{destination}` PUT endpoint for updates
 
 ---
 
-## Scenario Coverage
+## Phase 6: Notification & Alarm Behavior
 
-| Scenario | Component | Status |
-|----------|-----------|--------|
-| chain-full-30min | Chain engine | ✅ PASS |
-| chain-compressed-15min | Chain engine | ⚠️ Partial (no anchor count check) |
-| chain-minimum-3min | Chain engine | ❌ FAIL (2 anchors not 3) |
-| chain-invalid-rejected | Validation | ❌ FAIL (not rejected) |
-| parse-natural-language | Parser | ✅ PASS |
-| parse-simple-countdown | Parser | ❌ FAIL (crash) |
-| parse-tomorrow | Parser | ⚠️ Partial (time not parsed) |
-| voice-coach-personality | Voice | ✅ PASS |
-| voice-no-nonsense | Voice | ✅ PASS |
-| voice-all-personalities | Voice | ✅ PASS |
-| stats-hit-rate | Stats | ✅ PASS |
-| history-record-outcome | History | ✅ PASS |
-| history-record-miss-feedback | Feedback | ⚠️ Partial |
-| reminder-creation-crud | Database | ✅ PASS |
-| reminder-creation-cascade-delete | Cascade | ❌ FAIL (no DELETE) |
+### 6.1 Notification Tiers
+**Spec:** Section 5.3, Req #1  
+**Tiers:** gentle chime → pointed beep → urgent siren → looping alarm
+
+### 6.2 DND Awareness
+**Spec:** Section 5.3, Req #2  
+**Behavior:**
+- Early anchors during DND: silent notification
+- Final 5 minutes during DND: visual override + vibration
+
+### 6.3 Quiet Hours
+**Spec:** Section 5.3, Req #3  
+**Default:** 10pm–7am  
+**Behavior:** Suppress nudges, queue for post-quiet-hours
+
+### 6.4 Overdue Anchor Drop
+**Spec:** Section 5.3, Req #5  
+**Rule:** Drop anchors >15 minutes overdue
+
+### 6.5 Chain Overlap Serialization
+**Spec:** Section 5.3, Req #6  
+**Behavior:** Queue new anchors if chain is mid-escalation
+
+### 6.6 T-0 Alarm Loop
+**Spec:** Section 5.3, Req #7  
+**Behavior:** Loop until user dismisses or snoozes
 
 ---
 
-## Task Prioritization Summary
+## Phase 7: Background Scheduling
 
-| Priority | Task | Dependencies | Spec Section |
-|----------|------|--------------|--------------|
-| P0 | Fix parser crash | None | §3 |
-| P0 | Fix time parsing | None | §3 |
-| P0 | Fix chain validation | None | §2 |
-| P0 | Add DELETE endpoint | None | §13 |
-| P0 | Complete database schema | None | §13 |
-| P0 | LLM adapter interface | None | §3 |
-| P0 | TTS adapter interface | None | §4 |
-| P1 | Fix 3min chain (3 anchors) | None | §2 |
-| P1 | get_next_unfired_anchor | None | §2 |
-| P1 | Snooze chain recompute | None | §9 |
-| P1 | Message variations (3+) | None | §10 |
-| P1 | Notification behavior | None | §5 |
-| P1 | Dismissal feedback | None | §9 |
-| P2 | Background scheduling | Database | §6 |
-| P2 | Calendar integration | Database | §7 |
-| P2 | Location awareness | Database | §8 |
-| P2 | Sound library | Database | §12 |
-| P2 | Streak counter | Database | §11 |
-| P2 | Common miss window | Database | §11 |
-| P2 | Quiet hours/DND | None | §5 |
-| P2 | Chain overlap queue | None | §5 |
+### 7.1 Recovery Scan Logic
+**Spec:** Section 6.3, Req #3  
+**Behavior:** On app launch, fire overdue unfired anchors within 15-min grace window
+
+### 7.2 Pending Anchors Re-registration
+**Spec:** Section 6.3, Req #7  
+**Behavior:** Re-register unfired anchors on crash recovery
+
+### 7.3 Late Fire Warning
+**Spec:** Section 6.3, Req #8  
+**Rule:** Log warning if anchor fires >60 seconds after scheduled time
+
+---
+
+## Phase 8: Calendar Integration
+
+### 8.1 Calendar Adapter Interface
+**Spec:** Section 7.3  
+**Interface:** `ICalendarAdapter`
+
+**Implementations:**
+- `AppleCalendarAdapter` — EventKit
+- `GoogleCalendarAdapter` — Google Calendar API
+
+### 8.2 Calendar Sync Logic
+**Spec:** Section 7.3, Req #3  
+**Schedule:** On launch, every 15 minutes, via background refresh
+
+### 8.3 Event Suggestion Cards
+**Spec:** Section 7.3, Req #4  
+**Rule:** Only events with non-empty `location` field
+
+---
+
+## Phase 9: Location Awareness
+
+### 9.1 Single Location Check
+**Spec:** Section 8.3, Req #1, #3  
+**Trigger:** At departure anchor only  
+**API:** CoreLocation / FusedLocationProvider (single call)
+
+### 9.2 Geofence Comparison
+**Spec:** Section 8.3, Req #4  
+**Rule:** Within 500m = "at origin"
+
+### 9.3 Immediate Escalation
+**Spec:** Section 8.3, Req #5  
+**Behavior:** Fire firm/critical anchor if still at origin
+
+---
+
+## Phase 10: Sound Library
+
+### 10.1 Built-in Sounds
+**Spec:** Section 12.3, Req #1  
+**Categories:** Commute (5), Routine (5), Errand (5), Custom
+
+### 10.2 Custom Import
+**Spec:** Section 12.3, Req #3  
+**Formats:** MP3, WAV, M4A, max 30 seconds
+
+### 10.3 Corrupted Sound Fallback
+**Spec:** Section 12.3, Req #8  
+**Behavior:** Fall back to category default, surface error
+
+---
+
+## Scenario Coverage Matrix
+
+| Scenario File | Test | Current Status | Required Fix |
+|---------------|------|----------------|--------------|
+| `chain-full-30min.yaml` | TC-01 | ✅ PASS | None |
+| `chain-compressed-15min.yaml` | TC-02 | ⚠️ Partial | Verify anchor count |
+| `chain-minimum-3min.yaml` | TC-03 | ❌ FAIL | Bug 4: Wrong anchor count |
+| `chain-invalid-rejected.yaml` | TC-04 | ❌ FAIL | Bug 3: Validation incomplete |
+| `parse-natural-language.yaml` | TC-01 | ⚠️ Partial | Verify parsing |
+| `parse-simple-countdown.yaml` | TC-02 | ❌ FAIL | Bug 1: Parser crash |
+| `parse-tomorrow.yaml` | TC-03 | ❌ FAIL | Bug 2: Time not parsed |
+| `voice-coach-personality.yaml` | TC-01 | ✅ PASS | None |
+| `voice-no-nonsense.yaml` | TC-02 | ✅ PASS | None |
+| `voice-all-personalities.yaml` | TC-05 | ⚠️ Partial | Need 3+ variations |
+| `history-record-outcome.yaml` | - | ✅ PASS | None |
+| `history-record-miss-feedback.yaml` | TC-05 | ⚠️ Partial | Need adjustment applied |
+| `stats-hit-rate.yaml` | TC-01 | ✅ PASS | None |
+| `reminder-creation-cascade-delete.yaml` | TC-03 | ❌ FAIL | Missing DELETE endpoint |
+
+---
+
+## Task Prioritization
+
+### Priority 0 (Critical — Blocking Tests)
+
+| # | Task | Dependencies | Files |
+|---|------|--------------|-------|
+| P0-1 | Fix parser crash (simple countdown) | None | `src/test_server.py` |
+| P0-2 | Fix parser time extraction (no "at") | None | `src/test_server.py` |
+| P0-3 | Fix chain validation (departure in past) | None | `src/test_server.py` |
+| P0-4 | Fix 3-minute chain (3 anchors) | None | `src/test_server.py` |
+| P0-5 | Complete database schema | None | `src/test_server.py` |
+| P0-6 | Add DELETE endpoint (cascade) | Schema | `src/test_server.py` |
+| P0-7 | Enable foreign keys | Schema | `src/test_server.py` |
+
+### Priority 1 (High — Core Features)
+
+| # | Task | Dependencies | Files |
+|---|------|--------------|-------|
+| P1-1 | Add `get_next_unfired_anchor` endpoint | Schema | `src/test_server.py` |
+| P1-2 | Expand message variations (3+ per tier) | None | `src/test_server.py` |
+| P1-3 | Add snooze endpoint + recomputation | Schema, P0-5 | `src/test_server.py` |
+| P1-4 | Add dismissal feedback | Schema, P0-5 | `src/test_server.py` |
+| P1-5 | Implement streak counter | History | `src/test_server.py` |
+| P1-6 | Implement common miss window | History | `src/test_server.py` |
+| P1-7 | Implement feedback loop adjustment | Schema | `src/test_server.py` |
+
+### Priority 2 (Medium — Integrations)
+
+| # | Task | Dependencies | Files |
+|---|------|--------------|-------|
+| P2-1 | LLM adapter interface | None | `src/lib/adapters/llm_adapter.py` |
+| P2-2 | TTS adapter interface | None | `src/lib/adapters/tts_adapter.py` |
+| P2-3 | Calendar adapter interface | P2-1 | `src/lib/adapters/calendar_adapter.py` |
+| P2-4 | Location awareness | P0-5 | `src/lib/location.py` |
+| P2-5 | Notification behavior | P2-1 | `src/lib/notifications.py` |
+| P2-6 | Background scheduling | P0-5, P2-5 | `src/lib/scheduler.py` |
+| P2-7 | Sound library | P0-5 | `src/lib/sound_library.py` |
+
+### Priority 3 (Lower — Nice to Have)
+
+| # | Task | Dependencies | Files |
+|---|------|--------------|-------|
+| P3-1 | Custom voice prompts | P2-1 | `src/lib/adapters/llm_adapter.py` |
+| P3-2 | Quiet hours | P0-5 | `src/lib/notifications.py` |
+| P3-3 | Chain overlap queue | P1-3 | `src/lib/notifications.py` |
+| P3-4 | 90-day data retention | History | `src/lib/stats.py` |
 
 ---
 
@@ -435,23 +481,43 @@ Wait, re-reading TC-04: "Given arrival_time = 9:00 AM and drive_duration = 120 m
 After implementing fixes, run:
 
 ```bash
+# Syntax check
+python3 -m py_compile src/test_server.py
+
 # Start server
 python3 src/test_server.py &
+sleep 1
 
-# Test chain 30min
-curl -X POST http://localhost:8090/reminders -d '{"destination":"Test","arrival_time":"2026-04-09T09:00:00","drive_duration":30}' -H "Content-Type: application/json"
+# Test chain 30min (should pass)
+curl -s -X POST http://localhost:8090/reminders \
+  -H "Content-Type: application/json" \
+  -d '{"destination":"Test","arrival_time":"2026-04-09T09:00:00","drive_duration":30}' | jq
+
+# Test chain 3min (should pass with 3 anchors)
+curl -s -X POST http://localhost:8090/reminders \
+  -H "Content-Type: application/json" \
+  -d '{"destination":"Quick","arrival_time":"2026-04-09T09:00:00","drive_duration":3}' | jq
+
+# Test chain validation (should return 400)
+curl -s -X POST http://localhost:8090/reminders \
+  -H "Content-Type: application/json" \
+  -d '{"destination":"Test","arrival_time":"2026-04-09T09:00:00","drive_duration":120}' | jq
 
 # Test parser (should not crash)
-curl -X POST http://localhost:8090/parse -d '{"text":"dryer in 3 min"}' -H "Content-Type: application/json"
+curl -s -X POST http://localhost:8090/parse \
+  -H "Content-Type: application/json" \
+  -d '{"text":"dryer in 3 min"}' | jq
 
-# Test validation (should return 400)
-curl -X POST http://localhost:8090/reminders -d '{"destination":"Test","arrival_time":"2026-04-09T09:00:00","drive_duration":120}' -H "Content-Type: application/json"
+# Test parser tomorrow (should parse time)
+curl -s -X POST http://localhost:8090/parse \
+  -H "Content-Type: application/json" \
+  -d '{"text":"meeting tomorrow 2pm, 20 min drive"}' | jq
 
-# Test cascade delete (need DELETE endpoint)
-curl -X DELETE http://localhost:8090/reminders/{id}
-
-# Validation
-python3 -m py_compile src/test_server.py
+# Test cascade delete
+REMINDER_ID=$(curl -s -X POST http://localhost:8090/reminders \
+  -H "Content-Type: application/json" \
+  -d '{"destination":"Cascade Test","arrival_time":"2026-04-10T15:00:00","drive_duration":30}' | jq -r '.id')
+curl -s -X DELETE http://localhost:8090/reminders/$REMINDER_ID | jq
 ```
 
 ---
@@ -459,6 +525,39 @@ python3 -m py_compile src/test_server.py
 ## Definition of Done
 
 Every task must have:
-1. Implementation matching acceptance criteria in spec
-2. Corresponding scenario passing
-3. No regressions in existing tests
+1. ✅ Implementation matching acceptance criteria in spec
+2. ✅ Corresponding scenario passing
+3. ✅ No regressions in existing tests
+4. ✅ Code compiles without errors
+
+---
+
+## Files to Create/Modify
+
+### New Files
+```
+src/lib/
+src/lib/__init__.py
+src/lib/adapters/
+src/lib/adapters/__init__.py
+src/lib/adapters/llm_adapter.py
+src/lib/adapters/tts_adapter.py
+src/lib/adapters/calendar_adapter.py
+src/lib/tts_cache.py
+src/lib/location.py
+src/lib/notifications.py
+src/lib/scheduler.py
+src/lib/sound_library.py
+src/lib/stats.py
+src/lib/feedback_loop.py
+src/lib/dismissal.py
+```
+
+### Modified Files
+```
+src/test_server.py  (multiple changes)
+```
+
+---
+
+*Last generated: 2026-04-08*
