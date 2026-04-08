@@ -38,41 +38,41 @@ This document maps the specification requirements to implementation tasks, prior
 **❌ Missing from implementation (verified from spec):**
 
 *Core logic:*
-- `get_next_unfired_anchor(reminder_id)` - spec Section 2.3.6
-- `snoozed_to` field in anchors table - spec Section 2.3.5 (not in schema lines 44-56)
-- `tts_fallback` boolean field in anchors - spec Section 2.3.5 (not in schema)
+- `get_next_unfired_anchor(reminder_id)` - spec Section 2.3.6 (NOT in test_server.py)
+- `snoozed_to` field in anchors table - spec Section 2.3.5 (NOT in schema lines 44-56)
+- `tts_fallback` boolean field in anchors - spec Section 2.3.5 (NOT in schema)
 - `tts_clip_path` persisted to anchors - spec Section 2.3.5 (column exists but not used in insert at lines 508-511)
-- `calendar_event_id` field in reminders - spec Section 13.2 (not in schema)
-- `origin_lat`, `origin_lng`, `origin_address` fields in reminders - spec Section 13.2 (not in schema)
+- `calendar_event_id` field in reminders - spec Section 13.2 (NOT in schema)
+- `origin_lat`, `origin_lng`, `origin_address` fields in reminders - spec Section 13.2 (NOT in schema)
 - Unit tests for chain engine (TC-01 through TC-06 in spec Section 2.5) - 15 scenario files exist but no actual Python test files
 
 *Adapters:*
-- LLM adapter interface (`ILanguageModelAdapter`) - spec Section 3.3
-- Mock LLM adapter - spec Section 3.3.3
-- TTS adapter interface (`ITTSAdapter`) - spec Section 4.3
-- Mock TTS adapter - spec Section 4.5.5
-- TTS cache at `/tts_cache/{reminder_id}/` - spec Section 4.3.4
+- LLM adapter interface (`ILanguageModelAdapter`) - spec Section 3.3 (NOT implemented - keyword parser exists but no LLM)
+- Mock LLM adapter - spec Section 3.3.3 (NOT implemented)
+- TTS adapter interface (`ITTSAdapter`) - spec Section 4.3 (NOT implemented)
+- Mock TTS adapter - spec Section 4.5.5 (NOT implemented)
+- TTS cache at `/tts_cache/{reminder_id}/` - spec Section 4.3.4 (NOT implemented)
 
 *Voice personality:*
-- Message variations (3+ per tier) - spec Section 10.3.6 (only 1 per tier)
+- Message variations (3+ per tier) - spec Section 10.3.6 (only 1 per tier at lines 299-350)
 - Custom prompt mode (max 200 chars) - spec Section 10.3.3 (custom included but not as user prompt)
 
 *Stats & history:*
-- Streak counter - spec Section 11.3.4
-- Common miss window - spec Section 11.3.3
+- Streak counter - spec Section 11.3.4 (NOT implemented)
+- Common miss window - spec Section 11.3.3 (NOT implemented)
 - Feedback loop cap (+15 min) - spec Section 11.3.2 (lines 572-574 add +2 without cap)
 
 *Snooze & dismissal:*
-- Tap = 1 min snooze with TTS confirmation - spec Section 9.3.1
-- Tap-and-hold = custom snooze picker - spec Section 9.3.2
-- Chain re-computation after snooze - spec Section 9.3.3
-- Swipe-to-dismiss with feedback prompt - spec Section 9.3.5
+- Tap = 1 min snooze with TTS confirmation - spec Section 9.3.1 (NOT implemented)
+- Tap-and-hold = custom snooze picker - spec Section 9.3.2 (NOT implemented)
+- Chain re-computation after snooze - spec Section 9.3.3 (NOT implemented)
+- Swipe-to-dismiss with feedback prompt - spec Section 9.3.5 (NOT implemented)
 
 *Persistence:*
-- Versioned migrations - spec Section 13.3
-- In-memory test mode (`?mode=memory`) - spec Section 13.3.3
-- custom_sounds table - spec Section 13.2
-- calendar_sync table - spec Section 13.2
+- Versioned migrations - spec Section 13.3 (NOT implemented)
+- In-memory test mode (`?mode=memory`) - spec Section 13.3.3 (NOT implemented)
+- custom_sounds table - spec Section 13.2 (NOT in schema)
+- calendar_sync table - spec Section 13.2 (NOT in schema)
 
 *Missing entire features:*
 - Background scheduling (Notifee, BGTaskScheduler, WorkManager)
