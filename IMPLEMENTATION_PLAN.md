@@ -4,20 +4,98 @@
 
 This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04-08.spec.md`) to implementation tasks. 
 
-**Current Implementation Status:** `src/test_server.py` contains a proof-of-concept server with basic chain computation, keyword parsing, voice templates, and HTTP endpoints for harness testing. It is NOT production-ready.
+**Current Implementation Status:** `src/test_server.py` contains a proof-of-concept HTTP server with basic chain computation, keyword parsing, voice templates, and SQLite storage. It is **NOT production-ready** and is structured as a monolith.
 
-**Gap Summary:** 12 major components defined in the spec. Core logic (chain engine, parser) partially implemented as a monolith. Missing: modular architecture, LLM adapter, TTS integration, background scheduling, platform APIs, snooze/dismissal flow, sound library, and tests.
+**Gap Summary:** 15 major components defined in the spec. The entire modular architecture (`src/lib/`) does not exist. Only a basic test server exists. The scenario harness is also missing.
 
 ---
 
-## Phase 1: Foundation (Data & Core Engine)
+## Current Codebase State
+
+### What Exists
+- ✅ `src/test_server.py` - Monolithic proof-of-concept with:
+  - Basic chain engine (`compute_escalation_chain()`)
+  - Basic parser (`parse_reminder_natural()`)
+  - Voice personality templates (`VOICE_PERSONALITIES`)
+  - Basic SQLite schema (5 tables)
+  - HTTP endpoints for testing
+- ✅ `scenarios/*.yaml` - 15 validation scenario files
+- ✅ `specs/*.md` - Full product and technical specification
+
+### What's Missing (Critical)
+- ❌ **Entire modular architecture** (`src/lib/`) does not exist
+- ❌ **Scenario harness** (`harness/scenario_harness.py`) does not exist
+- ❌ **No unit tests** (pytest or otherwise)
+- ❌ **All spec components** are either PARTIAL or NOT STARTED
+
+---
+
+## Priority 0: Critical Path (Must Do First)
+
+### P0.1 — Scenario Harness ⬅️ HIGHEST PRIORITY
+**Spec Section:** Harness Validation  
+**Status:** NOT STARTED (blocking all validation)
+
+**Why Critical:** Cannot validate any implementation without the harness. All scenarios are defined but unrunnable.
+
+**Tasks:**
+1. Create `harness/scenario_harness.py` - main runner with argument parsing
+2. Create `harness/parser.py` - YAML scenario loader
+3. Create `harness/client.py` - HTTP client for API calls
+4. Create `harness/assertions.py` - HTTP status, DB record, LLM judge assertions
+5. Create `harness/__init__.py`
+6. Add pytest integration
+7. Test against existing scenarios
+
+**Acceptance Criteria:**
+- [ ] `python3 harness/scenario_harness.py --project urgent-alarm` runs against `scenarios/*.yaml`
+- [ ] Scenario parser loads all 15 YAML files
+- [ ] HTTP assertions work against `localhost:8090`
+- [ ] DB record assertions query SQLite directly
+- [ ] Results printed with PASS/FAIL per scenario
+
+**Dependencies:** None  
+**Tests:** Manual test run against existing scenarios
+
+---
+
+### P0.2 — Modular Architecture Foundation
+**Spec Section:** Overall Structure  
+**Status:** NOT STARTED (blocking all components)
+
+**Why Critical:** The proof-of-concept is a monolith. All production code must be modular for testability, maintainability, and platform adaptation.
+
+**Tasks:**
+1. Create `src/lib/__init__.py` - package init
+2. Create `src/lib/db/__init__.py` - database module
+3. Create `src/lib/db/migrations.py` - versioned migration system
+4. Create `src/lib/db/schema.py` - full spec-compliant schema with all columns
+5. Create `src/lib/db/connection.py` - connection management with WAL mode
+6. Create `src/lib/chain/__init__.py` - chain module
+7. Create `src/lib/parser/__init__.py` - parser module
+8. Create `src/lib/voice/__init__.py` - voice module
+9. Create `src/lib/tts/__init__.py` - TTS module
+10. Create `src/lib/scheduler/__init__.py` - scheduler module
+11. Create `src/lib/notifications/__init__.py` - notifications module
+12. Create `src/lib/calendar/__init__.py` - calendar module
+13. Create `src/lib/location/__init__.py` - location module
+14. Create `src/lib/snooze/__init__.py` - snooze module
+15. Create `src/lib/stats/__init__.py` - stats module
+16. Create `src/lib/sounds/__init__.py` - sounds module
+
+**Dependencies:** P0.1 (harness needed to validate)  
+**Tests:** All imports succeed, no circular dependencies
+
+---
+
+## Priority 1: Core Engine (Foundation)
 
 ### 1.1 — Database Schema & Migrations ⬅️ DO FIRST
 **Spec Section:** 13  
-**Status:** PARTIAL (basic schema in `init_db()`)
+**Status:** PARTIAL (basic schema in `test_server.py`)
 
 **What's Done:**
-- ✅ Basic 5-table schema (reminders, anchors, history, destination_adjustments, user_preferences)
+- ✅ Basic 5-table schema in `init_db()`
 - ✅ CASCADE delete on reminders → anchors
 - ✅ UUID generation for IDs
 
@@ -27,116 +105,103 @@ This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04
 - [ ] **Schema columns missing from `history`:** `actual_arrival`, `missed_reason`
 - [ ] **Missing tables:** `custom_sounds`, `calendar_sync`
 - [ ] **Missing:** Migration system with versioned sequential migrations
-- [ ] **Missing:** `PRAGMA foreign_keys = ON` and `PRAGMA journal_mode = WAL` configuration
-- [ ] **Missing:** In-memory test database support (`Database.getInMemoryInstance()`)
+- [ ] **Missing:** `PRAGMA foreign_keys = ON` and `PRAGMA journal_mode = WAL`
+- [ ] **Missing:** In-memory test database support
 - [ ] **Missing:** Indexes on frequently queried columns
 
 **Tasks:**
-1. Create `src/lib/db/__init__.py`
+1. Create `src/lib/db/schema.py` with full spec-compliant schema
 2. Create `src/lib/db/migrations.py` with sequential migration runner
-3. Create `src/lib/db/schema.py` with full spec-compliant schema
-4. Add PRAGMA configuration
-5. Add migration tests
+3. Add `src/lib/db/connection.py` with PRAGMA configuration
+4. Add migration tests
 
-**Dependencies:** None  
+**Dependencies:** P0.2  
 **Tests:** `tests/test_migrations.py`
 
 ---
 
 ### 1.2 — Escalation Chain Engine
 **Spec Section:** 2  
-**Status:** PARTIAL (basic `compute_escalation_chain()` exists)
+**Status:** PARTIAL (basic `compute_escalation_chain()` in test_server.py)
 
 **What's Done:**
 - ✅ Full 8-anchor chain for ≥25 min buffer
 - ✅ Compressed chains for 10-24, 5-9, ≤5 min buffers
 - ✅ `validate_chain()` function
-- ✅ Anchor timestamps calculated correctly
 
 **What's Missing:**
-- [ ] **Move to modular structure:** `src/lib/chain/__init__.py`, `src/lib/chain/engine.py`
-- [ ] **Missing:** `get_next_unfired_anchor(reminder_id)` function for scheduler recovery
-- [ ] **Missing:** Anchor re-sorting after snooze
-- [ ] **Bug:** Validation doesn't check `arrival_time > departure_time + minimum_drive_time` (spec says drive_duration can't exceed time_to_arrival)
-- [ ] **Missing:** Chain determinism verification (same inputs → same output)
+- [ ] **Move to modular structure:** `src/lib/chain/engine.py`
+- [ ] **Missing:** `get_next_unfired_anchor(reminder_id)` function
+- [ ] **Missing:** Anchor re-computation after snooze
+- [ ] **Bug:** Validation doesn't check `drive_duration` can't exceed time_to_arrival
+- [ ] **Missing:** Chain determinism verification
 - [ ] **Missing:** Proper error handling for edge cases
 
 **Tasks:**
-1. Create `src/lib/chain/__init__.py`
-2. Create `src/lib/chain/engine.py` with refactored `compute_escalation_chain()`
-3. Add `get_next_unfired_anchor(reminder_id, db)` function
-4. Add `recompute_chain_after_snooze(reminder_id, snooze_minutes, db)` function
-5. Fix validation: `drive_duration` cannot exceed minutes between now and arrival
-6. Add comprehensive tests for all 6 test scenarios (TC-01 through TC-06)
+1. Create `src/lib/chain/engine.py` - refactored from test_server.py
+2. Add `get_next_unfired_anchor(reminder_id, db)` function
+3. Add `recompute_chain_after_snooze(reminder_id, snooze_minutes, db)` function
+4. Fix validation: drive_duration cannot exceed time between now and arrival
+5. Add comprehensive tests for all 6 test scenarios
 
-**Dependencies:** 1.1 (database schema)  
+**Dependencies:** 1.1  
 **Tests:** `tests/test_chain_engine.py`
 
 ---
 
-## Phase 2: User Input & AI Integration
+## Priority 2: User Input & AI Integration
 
 ### 2.1 — Reminder Parser (LLM + Keyword Fallback)
 **Spec Section:** 3  
-**Status:** PARTIAL (basic `parse_reminder_natural()` with regex)
+**Status:** PARTIAL (basic regex in test_server.py)
 
 **What's Done:**
-- ✅ Keyword extraction for destination, drive duration, arrival time
+- ✅ Keyword extraction for destination, duration, arrival time
 - ✅ Relative time parsing ("in 3 min")
 - ✅ Tomorrow date resolution
 - ✅ Confidence score calculation
-- ✅ Basic "dryer in 3 min" → simple_countdown
 
 **What's Missing:**
 - [ ] **Missing:** `ILanguageModelAdapter` interface
-- [ ] **Missing:** Mock adapter for tests (`MockLanguageModelAdapter`)
+- [ ] **Missing:** Mock adapter for tests
 - [ ] **Missing:** LLM adapter for MiniMax/Anthropic API
-- [ ] **Missing:** Keyword extraction improvements:
-  - Handle "Parker Dr 9am, 30 min drive" (no "to")
-  - Handle "check-in at 9am" (no explicit time keyword)
-  - Better confidence scoring
+- [ ] **Missing:** Enhanced keyword extraction (handle "Parker Dr 9am" without "to")
 - [ ] **Missing:** Unintelligible input rejection ("blah blah")
-- [ ] **Missing:** Confirmation card data structure with field editing
+- [ ] **Missing:** Confirmation card data structure
 
 **Tasks:**
-1. Create `src/lib/parser/__init__.py`
-2. Create `src/lib/parser/adapters/base.py` with `ILanguageModelAdapter` interface
-3. Create `src/lib/parser/adapters/keyword_extractor.py` with enhanced regex
-4. Create `src/lib/parser/adapters/llm_adapter.py` for MiniMax API
-5. Create `src/lib/parser/mock_adapter.py` for tests
-6. Create `src/lib/parser/parser.py` with unified entry point
-7. Create `src/lib/parser/confirmation_card.py` with editable fields
-8. Write tests for all 7 scenarios (TC-01 through TC-07)
+1. Create `src/lib/parser/adapters/base.py` - `ILanguageModelAdapter` interface
+2. Create `src/lib/parser/adapters/keyword_extractor.py` - enhanced regex
+3. Create `src/lib/parser/adapters/llm_adapter.py` - MiniMax API
+4. Create `src/lib/parser/mock_adapter.py` - for tests
+5. Create `src/lib/parser/parser.py` - unified entry point
+6. Write tests for all 7 scenarios
 
-**Dependencies:** 1.1 (database)  
+**Dependencies:** 1.1  
 **Tests:** `tests/test_parser.py`
 
 ---
 
 ### 2.2 — Voice Personality System
 **Spec Section:** 10  
-**Status:** PARTIAL (basic templates exist in `VOICE_PERSONALITIES`)
+**Status:** PARTIAL (basic templates in test_server.py)
 
 **What's Done:**
-- ✅ 5 personality templates: coach, assistant, best_friend, no_nonsense, calm
-- ✅ Message template per urgency tier (8 tiers)
-- ✅ `generate_voice_message()` function
+- ✅ 5 personality templates
+- ✅ Message template per urgency tier
 
 **What's Missing:**
-- [ ] **Missing:** Message variations (minimum 3 per tier per personality)
-- [ ] **Missing:** `CustomPersonality` class with user prompt support (max 200 chars)
-- [ ] **Missing:** `MessageGenerator` class with template selection and variation rotation
-- [ ] **Missing:** ElevenLabs voice ID mapping per personality
-- [ ] **Missing:** System prompt fragments for message generation
+- [ ] **Missing:** Message variations (3+ per tier per personality)
+- [ ] **Missing:** `CustomPersonality` class with user prompt support
+- [ ] **Missing:** `MessageGenerator` class with variation rotation
+- [ ] **Missing:** ElevenLabs voice ID mapping
 
 **Tasks:**
-1. Create `src/lib/voice/__init__.py`
-2. Create `src/lib/voice/personalities.py` with full personality definitions
-3. Add 2+ message variations per tier per personality
-4. Create `src/lib/voice/message_generator.py` with variation rotation
-5. Create `src/lib/voice/custom_personalities.py` with user prompt support
-6. Create `src/lib/voice/manager.py` to load/store user preference
-7. Write tests for message variation (TC-05) and personality immutability (TC-04)
+1. Create `src/lib/voice/personalities.py` - full personality definitions
+2. Add 2+ message variations per tier per personality
+3. Create `src/lib/voice/message_generator.py` - variation rotation
+4. Create `src/lib/voice/custom_personalities.py` - user prompt support
+5. Write tests for TC-01 through TC-05
 
 **Dependencies:** None  
 **Tests:** `tests/test_voice_personalities.py`
@@ -145,58 +210,47 @@ This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04
 
 ### 2.3 — TTS Generation (ElevenLabs Adapter)
 **Spec Section:** 4  
-**Status:** NOT STARTED (message generation only)
+**Status:** NOT STARTED (message generation only in test_server.py)
 
 **What's Missing:**
 - [ ] **Missing:** `ITTSAdapter` interface
 - [ ] **Missing:** ElevenLabs API adapter
-- [ ] **Missing:** Mock adapter for tests (writes 1-sec silent file)
-- [ ] **Missing:** TTS cache directory structure (`/tts_cache/{reminder_id}/`)
-- [ ] **Missing:** Pre-generation at reminder creation time
-- [ ] **Missing:** Fallback to system notification sound if TTS fails
-- [ ] **Missing:** Cache invalidation on reminder delete
+- [ ] **Missing:** Mock adapter for tests
+- [ ] **Missing:** TTS cache directory structure
+- [ ] **Missing:** Pre-generation at reminder creation
+- [ ] **Missing:** Fallback to system notification sound
+- [ ] **Missing:** Cache invalidation on delete
 - [ ] **Missing:** 30-second generation timeout
 
 **Tasks:**
-1. Create `src/lib/tts/__init__.py`
-2. Create `src/lib/tts/adapters/base.py` with `ITTSAdapter` interface
-3. Create `src/lib/tts/adapters/elevenlabs_adapter.py`
-4. Create `src/lib/tts/mock_adapter.py` for tests
-5. Create `src/lib/tts/generator.py` for pre-generation
-6. Create `src/lib/tts/cache_manager.py` for file management
-7. Implement fallback mechanism
-8. Write tests for TC-01 through TC-05
+1. Create `src/lib/tts/adapters/base.py` - `ITTSAdapter` interface
+2. Create `src/lib/tts/adapters/elevenlabs_adapter.py`
+3. Create `src/lib/tts/mock_adapter.py` - for tests
+4. Create `src/lib/tts/generator.py` - pre-generation
+5. Create `src/lib/tts/cache_manager.py` - file management
+6. Implement fallback mechanism
+7. Write tests for TC-01 through TC-05
 
-**Dependencies:** 1.2 (chain engine), 2.2 (voice personalities)  
+**Dependencies:** 1.2, 2.2  
 **Tests:** `tests/test_tts.py`
 
 ---
 
-## Phase 3: Platform Integration
+## Priority 3: Platform Integration
 
 ### 3.1 — Background Scheduling (Notifee)
 **Spec Section:** 6  
 **Status:** NOT STARTED
 
-**What's Missing:**
-- [ ] **Missing:** `ISchedulerAdapter` interface
-- [ ] **Missing:** Notifee adapter (React Native)
-- [ ] **Missing:** Mock adapter for tests
-- [ ] **Missing:** Recovery scan on app launch
-- [ ] **Missing:** Re-registration of pending anchors after crash
-- [ ] **Missing:** 15-minute grace window for overdue anchors
-- [ ] **Missing:** Late fire detection (>60s) with warning log
-
 **Tasks:**
-1. Create `src/lib/scheduler/__init__.py`
-2. Create `src/lib/scheduler/adapters/base.py` with `ISchedulerAdapter` interface
-3. Create `src/lib/scheduler/adapters/notifee_adapter.py`
-4. Create `src/lib/scheduler/adapters/mock_adapter.py`
-5. Create `src/lib/scheduler/recovery.py` with recovery_scan()
-6. Create `src/lib/scheduler/registration.py` with re_register_pending_anchors()
-7. Write tests for all 6 scenarios (TC-01 through TC-06)
+1. Create `src/lib/scheduler/adapters/base.py` - `ISchedulerAdapter` interface
+2. Create `src/lib/scheduler/adapters/notifee_adapter.py`
+3. Create `src/lib/scheduler/adapters/mock_adapter.py`
+4. Create `src/lib/scheduler/recovery.py` - recovery_scan()
+5. Create `src/lib/scheduler/registration.py` - re_register_pending_anchors()
+6. Write tests for TC-01 through TC-06
 
-**Dependencies:** 1.2 (chain engine), 1.1 (database)  
+**Dependencies:** 1.2, 1.1  
 **Tests:** `tests/test_scheduler.py`
 
 ---
@@ -205,25 +259,14 @@ This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04
 **Spec Section:** 5  
 **Status:** NOT STARTED
 
-**What's Missing:**
-- [ ] **Missing:** Sound tier mapping (urgency tier → sound type)
-- [ ] **Missing:** DND detection and early anchor suppression
-- [ ] **Missing:** Final 5-minute DND override (visual + vibration)
-- [ ] **Missing:** Quiet hours enforcement (10pm-7am default, configurable)
-- [ ] **Missing:** Chain overlap serialization (queue new anchors)
-- [ ] **Missing:** T-0 alarm looping until user dismiss/snooze
-- [ ] **Missing:** 15-minute overdue anchor drop rule
-- [ ] **Missing:** Notification display with destination, time remaining, personality icon
-
 **Tasks:**
-1. Create `src/lib/notifications/__init__.py`
-2. Create `src/lib/notifications/sound_tier.py` with tier → sound mapping
-3. Create `src/lib/notifications/manager.py` with DND/quiet hours handling
-4. Create `src/lib/notifications/queue.py` for chain overlap serialization
-5. Create `src/lib/notifications/alarm.py` for T-0 looping
-6. Write tests for all 6 scenarios (TC-01 through TC-06)
+1. Create `src/lib/notifications/sound_tier.py` - tier → sound mapping
+2. Create `src/lib/notifications/manager.py` - DND/quiet hours handling
+3. Create `src/lib/notifications/queue.py` - chain overlap serialization
+4. Create `src/lib/notifications/alarm.py` - T-0 looping
+5. Write tests for TC-01 through TC-06
 
-**Dependencies:** 3.1 (scheduler)  
+**Dependencies:** 3.1  
 **Tests:** `tests/test_notifications.py`
 
 ---
@@ -232,25 +275,14 @@ This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04
 **Spec Section:** 7  
 **Status:** NOT STARTED
 
-**What's Missing:**
-- [ ] **Missing:** `ICalendarAdapter` interface
-- [ ] **Missing:** Apple Calendar adapter (EventKit)
-- [ ] **Missing:** Google Calendar adapter (Google Calendar API)
-- [ ] **Missing:** Sync manager (every 15 min, on launch)
-- [ ] **Missing:** Suggestion card generation for events with locations
-- [ ] **Missing:** Recurring event handling
-- [ ] **Missing:** Permission denial handling
-- [ ] **Missing:** Graceful degradation (sync failure → error banner)
-
 **Tasks:**
-1. Create `src/lib/calendar/__init__.py`
-2. Create `src/lib/calendar/adapters/base.py` with `ICalendarAdapter` interface
-3. Create `src/lib/calendar/adapters/apple_calendar_adapter.py`
-4. Create `src/lib/calendar/adapters/google_calendar_adapter.py`
-5. Create `src/lib/calendar/sync_manager.py`
-6. Write tests for all 6 scenarios (TC-01 through TC-06)
+1. Create `src/lib/calendar/adapters/base.py` - `ICalendarAdapter` interface
+2. Create `src/lib/calendar/adapters/apple_calendar_adapter.py`
+3. Create `src/lib/calendar/adapters/google_calendar_adapter.py`
+4. Create `src/lib/calendar/sync_manager.py`
+5. Write tests for TC-01 through TC-06
 
-**Dependencies:** 1.1 (database)  
+**Dependencies:** 1.1  
 **Tests:** `tests/test_calendar.py`
 
 ---
@@ -259,80 +291,57 @@ This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04
 **Spec Section:** 8  
 **Status:** NOT STARTED
 
-**What's Missing:**
-- [ ] **Missing:** iOS adapter (CoreLocation)
-- [ ] **Missing:** Android adapter (FusedLocationProvider)
-- [ ] **Missing:** Single-point location check at departure
-- [ ] **Missing:** Origin resolution (user address or creation-time location)
-- [ ] **Missing:** 500m geofence comparison
-- [ ] **Missing:** Immediate escalation if still at origin
-- [ ] **Missing:** Permission request at first location-aware reminder
-
 **Tasks:**
-1. Create `src/lib/location/__init__.py`
-2. Create `src/lib/location/adapters/ios_adapter.py`
-3. Create `src/lib/location/adapters/android_adapter.py`
-4. Create `src/lib/location/manager.py` with single-check logic
-5. Write tests for all 5 scenarios (TC-01 through TC-05)
+1. Create `src/lib/location/adapters/ios_adapter.py`
+2. Create `src/lib/location/adapters/android_adapter.py`
+3. Create `src/lib/location/manager.py` - single-check logic
+4. Write tests for TC-01 through TC-05
 
-**Dependencies:** 3.1 (scheduler)  
+**Dependencies:** 3.1  
 **Tests:** `tests/test_location.py`
 
 ---
 
-## Phase 4: User Interaction
+## Priority 4: User Interaction
 
 ### 4.1 — Snooze & Dismissal Flow
 **Spec Section:** 9  
 **Status:** NOT STARTED
 
-**What's Missing:**
-- [ ] **Missing:** Tap snooze (1 minute) with TTS confirmation
-- [ ] **Missing:** Tap-and-hold custom snooze picker (1, 3, 5, 10, 15 min)
-- [ ] **Missing:** Chain re-computation after snooze
-- [ ] **Missing:** Snoozed anchor re-registration with Notifee
-- [ ] **Missing:** Swipe-to-dismiss feedback prompt
-- [ ] **Missing:** Feedback sub-prompt ("Left too early", "Left too late", "Other")
-- [ ] **Missing:** Snooze persistence across app restart
-
 **Tasks:**
-1. Create `src/lib/snooze/__init__.py`
-2. Create `src/lib/snooze/handlers.py` with tap/tap-and-hold logic
-3. Create `src/lib/snooze/recomputation.py` for chain shifting
-4. Create `src/lib/snooze/feedback.py` for dismissal prompts
-5. Create `src/lib/snooze/persistence.py` for restart recovery
-6. Write tests for all 6 scenarios (TC-01 through TC-06)
+1. Create `src/lib/snooze/handlers.py` - tap/tap-and-hold logic
+2. Create `src/lib/snooze/recomputation.py` - chain shifting
+3. Create `src/lib/snooze/feedback.py` - dismissal prompts
+4. Create `src/lib/snooze/persistence.py` - restart recovery
+5. Write tests for TC-01 through TC-06
 
-**Dependencies:** 3.1 (scheduler), 2.2 (voice personalities), 2.3 (TTS)  
+**Dependencies:** 3.1, 2.2, 2.3  
 **Tests:** `tests/test_snooze.py`
 
 ---
 
 ### 4.2 — History, Stats & Feedback Loop
 **Spec Section:** 11  
-**Status:** PARTIAL (basic `calculate_hit_rate()`, `destination_adjustments`)
+**Status:** PARTIAL (basic hit rate in test_server.py)
 
 **What's Done:**
-- ✅ Hit rate calculation for trailing 7 days
-- ✅ Basic destination_adjustments update on miss/hit
+- ✅ `calculate_hit_rate()` function
+- ✅ Basic `destination_adjustments` updates
 
 **What's Missing:**
-- [ ] **Missing:** Streak counter (increment on hit, reset on miss)
+- [ ] **Missing:** Streak counter
 - [ ] **Missing:** Common miss window identification
 - [ ] **Missing:** `actual_arrival` tracking
 - [ ] **Missing:** 90-day retention policy
-- [ ] **Missing:** All stats computed from history table (no separate stats store)
-- [ ] **Missing:** Adjustment formula: `stored + (late_count * 2)` capped at +15 min
+- [ ] **Missing:** Adjustment formula with +15 min cap
 
 **Tasks:**
-1. Create `src/lib/stats/__init__.py`
-2. Create `src/lib/stats/calculator.py` with hit rate, streaks, miss window
-3. Create `src/lib/stats/feedback_loop.py` with adjustment formula
-4. Create `src/lib/stats/history_manager.py` with 90-day retention
-5. Update `src/lib/stats/queries.py` to derive all stats from history
-6. Write tests for all 7 scenarios (TC-01 through TC-07)
+1. Create `src/lib/stats/calculator.py` - hit rate, streaks, miss window
+2. Create `src/lib/stats/feedback_loop.py` - adjustment formula
+3. Create `src/lib/stats/history_manager.py` - 90-day retention
+4. Write tests for TC-01 through TC-07
 
-**Dependencies:** 1.1 (database)  
+**Dependencies:** 1.1  
 **Tests:** `tests/test_stats.py`
 
 ---
@@ -341,73 +350,24 @@ This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04
 **Spec Section:** 12  
 **Status:** NOT STARTED
 
-**What's Missing:**
-- [ ] **Missing:** Built-in sounds (5 per category: commute, routine, errand)
-- [ ] **Missing:** Custom sound importer (MP3, WAV, M4A, max 30 sec)
-- [ ] **Missing:** Transcoding to normalized format
-- [ ] **Missing:** Per-reminder sound selection override
-- [ ] **Missing:** Corrupted file fallback
-- [ ] **Missing:** Sound persistence on reminder edit
-
 **Tasks:**
-1. Create `src/lib/sounds/__init__.py`
-2. Create `src/lib/sounds/builtins.py` with bundled audio references
-3. Create `src/lib/sounds/importer.py` with format validation
-4. Create `src/lib/sounds/manager.py` with selection and fallback
-5. Write tests for all 5 scenarios (TC-01 through TC-05)
+1. Create `src/lib/sounds/builtins.py` - bundled audio references
+2. Create `src/lib/sounds/importer.py` - format validation
+3. Create `src/lib/sounds/manager.py` - selection and fallback
+4. Write tests for TC-01 through TC-05
 
-**Dependencies:** 1.1 (database)  
+**Dependencies:** 1.1  
 **Tests:** `tests/test_sounds.py`
 
 ---
 
-## Phase 5: Integration & Testing
+## Priority 5: Integration & Testing
 
-### 5.1 — Scenario Harness
-**Status:** PARTIAL (scenarios exist in `scenarios/*.yaml`, harness directory empty)
-
-**What's Done:**
-- ✅ 14 scenario files in `scenarios/` directory
-- ✅ Scenario format with triggers, assertions (http_status, db_record, llm_judge)
-
-**What's Missing:**
-- [ ] **Missing:** `harness/scenario_harness.py` - the test runner
-- [ ] **Missing:** YAML scenario parser
-- [ ] **Missing:** HTTP client for API calls
-- [ ] **Missing:** Database assertion checker
-- [ ] **Missing:** LLM judge integration
-
-**Tasks:**
-1. Create `harness/__init__.py`
-2. Create `harness/scenario_harness.py` - main runner
-3. Create `harness/parser.py` for YAML scenarios
-4. Create `harness/client.py` for HTTP calls
-5. Create `harness/assertions.py` for db_record checks
-6. Create `harness/judge.py` for llm_judge assertions
-7. Add pytest integration
-
-**Dependencies:** Core modules (chain, parser, stats)  
-**Tests:** Run against existing scenarios
-
----
-
-### 5.2 — Acceptance Criteria Mapping
-**Spec Section:** 14  
+### 5.1 — React Native App Structure
 **Status:** NOT STARTED
 
 **Tasks:**
-1. Review all 42 acceptance criteria from spec sections 2-13
-2. Map each criterion to test files
-3. Ensure every criterion has at least one passing test
-4. Add checklist to each test file docstring
-
----
-
-### 5.3 — App Structure (React Native Shell)
-**Status:** NOT STARTED
-
-**Tasks:**
-1. Create `src/App.tsx` React Native entry point
+1. Create `src/App.tsx` - React Native entry point
 2. Create `src/screens/QuickAddScreen.tsx`
 3. Create `src/screens/RemindersListScreen.tsx`
 4. Create `src/screens/HistoryScreen.tsx`
@@ -422,30 +382,32 @@ This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04
 ## Implementation Order Summary
 
 ```
-Phase 1: Foundation (1 week)
-├── 1.1 Database Schema & Migrations  ← DO FIRST
+Priority 0: Critical Path
+├── P0.1 Scenario Harness ← HIGHEST (unblock validation)
+└── P0.2 Modular Architecture Foundation
+
+Priority 1: Core Engine
+├── 1.1 Database Schema & Migrations
 └── 1.2 Escalation Chain Engine
 
-Phase 2: User Input & AI (1 week)
-├── 2.1 Reminder Parser (LLM + Keyword)
+Priority 2: User Input & AI
+├── 2.1 Reminder Parser
 ├── 2.2 Voice Personality System
 └── 2.3 TTS Generation
 
-Phase 3: Platform Integration (2 weeks)
+Priority 3: Platform Integration
 ├── 3.1 Background Scheduling
 ├── 3.2 Notification & Alarm Behavior
 ├── 3.3 Calendar Integration
 └── 3.4 Location Awareness
 
-Phase 4: User Interaction (1 week)
+Priority 4: User Interaction
 ├── 4.1 Snooze & Dismissal Flow
 ├── 4.2 History, Stats & Feedback Loop
 └── 4.3 Sound Library
 
-Phase 5: Integration & Testing (1 week)
-├── 5.1 Scenario Harness
-├── 5.2 Acceptance Criteria Mapping
-└── 5.3 App Structure (React Native Shell)
+Priority 5: Integration
+└── 5.1 React Native App Structure
 ```
 
 ---
@@ -454,6 +416,8 @@ Phase 5: Integration & Testing (1 week)
 
 | Component | Status | Test Scenarios |
 |-----------|--------|----------------|
+| P0.1 Scenario Harness | NOT STARTED | 0/15 (blocking) |
+| P0.2 Modular Architecture | NOT STARTED | 0 |
 | 1.1 Database & Migrations | PARTIAL | 0/5 |
 | 1.2 Chain Engine | PARTIAL | 2/6 |
 | 2.1 Reminder Parser | PARTIAL | 1/7 |
@@ -466,11 +430,9 @@ Phase 5: Integration & Testing (1 week)
 | 4.1 Snooze & Dismissal | NOT STARTED | 0/6 |
 | 4.2 Stats & Feedback | PARTIAL | 2/7 |
 | 4.3 Sound Library | NOT STARTED | 0/5 |
-| 5.1 Scenario Harness | PARTIAL | 0/14 |
-| 5.2 Acceptance Criteria | NOT STARTED | 0/42 |
-| 5.3 React Native App | NOT STARTED | 0/0 |
+| 5.1 React Native App | NOT STARTED | 0 |
 
-**Total:** ~16% implementation complete (2 partial, 9 not started)
+**Total:** ~5% implementation complete (3 partial, 11 not started)
 
 ---
 
@@ -478,17 +440,18 @@ Phase 5: Integration & Testing (1 week)
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| ElevenLabs API rate limits | Delays reminder creation | Mock adapter + fallback |
-| Background task killed by OS | Missed anchors | Recovery scan + 15-min grace |
-| LLM parsing failure | Bad reminder data | Keyword fallback with confidence |
-| Calendar API errors | Broken sync | Graceful degradation |
-| Location permission denied | No location escalation | Create without, show note |
-| TTS generation timeout | No voice clips | Fallback to notification sound |
+| No harness = can't validate | Critical | Implement P0.1 first |
+| Modular structure missing | High | Implement P0.2 early |
+| ElevenLabs API rate limits | Medium | Mock adapter + fallback |
+| Background task killed by OS | Medium | Recovery scan + 15-min grace |
+| LLM parsing failure | Medium | Keyword fallback with confidence |
 
 ---
 
 ## Success Criteria
 
+- [ ] Scenario harness runs all 15 scenarios and reports PASS/FAIL
+- [ ] Modular architecture in `src/lib/` with all modules implemented
 - [ ] All 42 acceptance criteria from spec sections 2-13 have passing tests
 - [ ] Chain engine produces correct anchors for all buffer sizes
 - [ ] LLM adapter is fully mock-able for CI
