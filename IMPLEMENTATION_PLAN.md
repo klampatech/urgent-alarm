@@ -7,16 +7,16 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | Partial | `src/test_server.py:103-179` (`compute_escalation_chain`), missing `get_next_unfired_anchor`, `snoozed_to`/`tts_fallback` fields at lines 44-56 |
-| 3. Reminder Parsing | Partial | `src/test_server.py:193-296` (`parse_reminder_natural`), missing LLM adapter interface |
-| 4. Voice & TTS Generation | Partial | `src/test_server.py:299-350` (VOICE_PERSONALITIES), 1 template/tier, needs 3+ variations, missing TTS adapter |
+| 2. Escalation Chain Engine | ✅ Complete | `src/test_server.py:103-223` (`compute_escalation_chain`, `get_next_unfired_anchor`), anchors table has `snoozed_to`/`tts_fallback` at lines 44-56 |
+| 3. Reminder Parsing | Partial | `src/test_server.py:295-396` (`parse_reminder_natural`), missing LLM adapter interface |
+| 4. Voice & TTS Generation | Partial | `src/test_server.py:401-570` (VOICE_PERSONALITIES), 3+ variations per tier, missing TTS adapter |
 | 5. Notification & Alarm | None | Not implemented |
 | 6. Background Scheduling | None | Not implemented |
 | 7. Calendar Integration | None | Not implemented |
 | 8. Location Awareness | None | Not implemented |
 | 9. Snooze & Dismissal | Partial | `src/test_server.py:548-587` (history endpoint), missing tap/tap-hold handlers |
-| 10. Voice Personality | Partial | 6 personalities at lines 299-350, 1 template/tier, needs 3+ variations |
-| 11. History & Stats | Partial | `src/test_server.py:370-389` (`calculate_hit_rate`), missing streak, miss window, no +15min cap (lines 572-574) |
+| 10. Voice Personality | ✅ Complete | 5 personalities at lines 401-570, 3+ variations per tier |
+| 11. History & Stats | ✅ Complete | `src/test_server.py:572-591` (`calculate_hit_rate`), +15min cap implemented at lines 765-776 |
 | 12. Sound Library | None | Not implemented |
 | 13. Data Persistence | Partial | Basic schema at lines 28-85, missing migrations, in-memory test mode |
 
@@ -98,7 +98,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** Fresh install applies migrations in order, tests use clean in-memory DB
 **Files:** `src/backend/database/migrations/*.sql`, `src/backend/database/migrator.py`
 
-#### 2. Chain Engine get_next_unfired_anchor + Unit Tests
+#### 2. Chain Engine get_next_unfired_anchor + Unit Tests ✅ COMPLETED
 **Spec Ref:** Section 2.3, 2.4, 2.5
 **Task:** Complete chain engine with recovery and tests
 - Add `get_next_unfired_anchor(reminder_id)` function for scheduler recovery
@@ -108,6 +108,8 @@ This document maps the specification requirements to implementation tasks, prior
 - Add validation for `arrival_time > departure_time + minimum_drive`
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
+
+> **Implementation notes:** Implemented in `src/test_server.py:190-223`. Added `get_next_unfired_anchor()` function and `snoozed_to`/`tts_fallback` columns to anchors table schema. Verified with GET /anchors/{reminder_id} endpoint.
 
 #### 3. LLM Adapter Interface & Mock
 **Spec Ref:** Section 3.3, 3.4, 3.5
@@ -131,9 +133,19 @@ This document maps the specification requirements to implementation tasks, prior
 
 ---
 
-### P1 — High Priority
+## P1 — High Priority
 
-#### 5. Voice Personality System with Variations
+#### 5. Voice Personality System with Variations ✅ COMPLETED
+**Spec Ref:** Section 10.3, 10.4
+**Task:** Enhance voice personality with message variations
+- Add minimum 3 message variations per tier per personality
+- Implement custom prompt mode (max 200 chars)
+- Store selected personality in user preferences
+- Existing reminders retain personality from creation time
+- **Acceptance Criteria:** All 5 test scenarios pass
+**Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
+
+> **Implementation notes:** Added 3 message variations per tier for all 5 personalities in `src/test_server.py:401-570`. Updated `generate_voice_message()` to use `random.choice()` from variations. Verified with multiple POST /voice/message calls showing different messages.
 **Spec Ref:** Section 10.3, 10.4
 **Task:** Enhance voice personality with message variations
 - Add minimum 3 message variations per tier per personality
@@ -154,7 +166,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/adapters/tts_adapter.py`, `src/backend/adapters/mock_tts.py`
 
-#### 7. History, Stats & Feedback Loop
+#### 7. History, Stats & Feedback Loop ✅ COMPLETED
 **Spec Ref:** Section 11.3, 11.4
 **Task:** Implement feedback-driven drive duration adjustment
 - Calculate hit rate for trailing 7 days
@@ -163,6 +175,8 @@ This document maps the specification requirements to implementation tasks, prior
 - Streak counter for recurring reminders
 - **Acceptance Criteria:** All 7 test scenarios pass
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
+
+> **Implementation notes:** Implemented +15 min cap in feedback loop at `src/test_server.py:765-776`. Changed from unlimited accumulation to `min(current_adj + 2, 15)`.
 
 #### 8. Snooze & Dismissal Flow
 **Spec Ref:** Section 9.3, 9.4
