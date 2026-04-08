@@ -1,40 +1,79 @@
 # URGENT Alarm - Implementation Plan
 
 > **Generated:** 2026-04-08  
+> **Updated:** 2026-04-08  
 > **Purpose:** Bridge gaps between `specs/urgent-voice-alarm-app-2026-04-08.spec.md` and current codebase
 
 ---
 
-## Analysis Summary
-
-### Specification Files
-- `specs/urgent-voice-alarm-app-2026-04-08.md` — Product overview (user stories, core experience, features)
-- `specs/urgent-voice-alarm-app-2026-04-08.spec.md` — Full technical spec (14 sections, 1000+ lines)
-
-### Current Codebase State
+## Quick Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `src/test_server.py` | ⚠️ Proof-of-concept | HTTP server with partial logic (~400 lines) |
+| `src/test_server.py` | ⚠️ Partial | HTTP server with partial logic (~400 lines) |
 | `harness/` | ❌ **EMPTY** | **CRITICAL** — Otto cannot run without this |
 | `src/lib/` | ❌ Missing | Must be created for structured library |
-| `src/lib/database.py` | ❌ Missing | Schema incomplete per spec Section 13 |
-| `src/lib/chain_engine.py` | ❌ Missing | Core logic only in test_server.py |
-| `src/lib/adapters/*.py` | ❌ Missing | LLM, TTS, Calendar interfaces missing |
-| `src/lib/services/*.py` | ❌ Missing | Notification, snooze, location services missing |
+| `scenarios/` | ✅ Ready | 16 YAML scenarios defined, not yet executable |
 
-### What's Implemented (in `test_server.py`)
+---
 
-| Feature | Implemented | Spec Section |
-|---------|-------------|--------------|
-| Chain engine (`compute_escalation_chain`) | ✅ Partial | §2 |
-| Parser (`parse_reminder_natural`) | ⚠️ Keyword only | §3 |
-| Voice personalities (`VOICE_PERSONALITIES`) | ⚠️ 1 template/tier | §10 |
-| Hit rate calculation (`calculate_hit_rate`) | ✅ Basic | §11 |
-| HTTP endpoints | ✅ Partial | N/A |
-| Database schema | ⚠️ Incomplete | §13 |
+## Critical First Step: Otto Cannot Run
 
-### Gaps by Spec Section
+**The `harness/` directory is empty.** Otto needs `harness/scenario_harness.py` to execute scenarios.
+
+### Why This Blocks Everything
+1. Otto validates code by running scenarios from `/var/otto-scenarios/{project}/*.yaml`
+2. No harness = no validation = Otto cannot assess implementation quality
+3. Cannot measure progress or identify regressions
+
+### The Fix (Priority 1)
+Create `harness/scenario_harness.py` that:
+- Parses `--project` and `--verbose` CLI args
+- Reads scenarios from `/var/otto-scenarios/{project}/` (or env `OTTO_SCENARIO_DIR`)
+- Starts `src/test_server.py` (the actual HTTP server, NOT `src/web.py` which doesn't exist)
+- Executes each scenario's API sequences
+- Validates assertions (HTTP status, DB records, llm_judge)
+- Writes results to `/tmp/ralph-scenario-result.json`
+
+**See `scenarios/README.md` for expected behavior and existing scenario definitions.**
+
+---
+
+## Current Codebase Analysis
+
+### What Exists (`src/test_server.py`)
+
+| Feature | Implemented | Spec Gap |
+|---------|-------------|----------|
+| Chain engine | ⚠️ Partial | Missing 20-24 min compression, `get_next_unfired_anchor()` |
+| Parser | ⚠️ Keyword only | No LLM adapter interface, no mock, confidence scoring |
+| Voice personalities | ⚠️ 1 template/tier | Spec requires 3 min variations per tier |
+| Hit rate calculation | ✅ Basic | Missing "common miss window" |
+| Database schema | ⚠️ Incomplete | Missing 12+ columns per spec §13 |
+| HTTP endpoints | ⚠️ Partial | Missing `/anchors/next-unfired`, `/stats/*` |
+| Cascade delete | ❌ Missing | No FK cascade configured |
+
+### What Needs Creating (`harness/`)
+
+```
+harness/
+├── __init__.py
+├── scenario_harness.py     # Main entry point
+├── conftest.py            # Pytest fixtures
+├── runner.py              # Scenario execution engine
+├── assertions/
+│   ├── __init__.py
+│   ├── http_assertions.py  # HTTP status/body assertions
+│   ├── db_assertions.py    # DB record assertions
+│   └── llm_judge.py        # LLM-based validation
+└── fixtures/
+    ├── __init__.py
+    └── server.py           # Test server lifecycle
+```
+
+---
+
+## Gaps by Spec Section
 
 | § | Section | Severity | Gap Details |
 |---|---------|----------|-------------|
@@ -54,396 +93,238 @@
 
 ---
 
+## Scenario → Implementation Mapping
+
+| Scenario File | Tests | Requires |
+|--------------|-------|----------|
+| `chain-full-30min.yaml` | TC-01 (8 anchors) | `compute_escalation_chain()` |
+| `chain-compressed-15min.yaml` | TC-02 (compressed) | Chain compression logic |
+| `chain-minimum-3min.yaml` | TC-03 (minimum) | Minimum chain logic |
+| `chain-invalid-rejected.yaml` | TC-04 (validation) | `validate_chain()` |
+| `parse-natural-language.yaml` | TC-01 (§3) | `parse_reminder_natural()` |
+| `parse-simple-countdown.yaml` | TC-02 (§3) | Simple countdown detection |
+| `parse-tomorrow.yaml` | TC-03 (§3) | Tomorrow date resolution |
+| `voice-coach-personality.yaml` | TC-01 (§10) | `VOICE_PERSONALITIES['coach']` |
+| `voice-no-nonsense.yaml` | TC-02 (§10) | `VOICE_PERSONALITIES['no_nonsense']` |
+| `voice-all-personalities.yaml` | §10 all | All 5 personalities |
+| `history-record-outcome.yaml` | TC-04 (§11) | `POST /history` |
+| `history-record-miss-feedback.yaml` | TC-05 (§11) | Feedback processing |
+| `stats-hit-rate.yaml` | TC-01 (§11) | `calculate_hit_rate()` |
+| `reminder-creation-crud.yaml` | §13 CRUD | Full reminder lifecycle |
+| `reminder-creation-cascade-delete.yaml` | TC-03 (§13) | FK cascade |
+
+---
+
 ## Implementation Tasks
 
-### P0 — Otto Harness (Blocking)
-
-> **Otto cannot run without this. Must be created first.**
+### P0 — Otto Harness (Blocking Otto Loop)
 
 #### 1.1 Create Scenario Harness
-**Priority:** P0 — Blocking Otto loop  
-**Files:** `harness/scenario_harness.py`, `harness/conftest.py`
+**Files:** `harness/scenario_harness.py`, `harness/conftest.py`, `harness/runner.py`
 
-**Tasks:**
-- [ ] Create `harness/scenario_harness.py` as main executable
-- [ ] Parse command-line args: `--project`, `--verbose`
-- [ ] Read scenarios from `/var/otto-scenarios/{project}/*.yaml`
-- [ ] Run pytest on `harness/` directory
-- [ ] Write results to `/tmp/ralph-scenario-result.json`
-- [ ] Handle sudo requirements gracefully
+```python
+# harness/scenario_harness.py (skeleton)
+import argparse
+import json
+import os
+import subprocess
+import time
+import sys
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--project', required=True)
+    parser.add_argument('--verbose', action='store_true')
+    args = parser.parse_args()
+    
+    # Read scenarios from /var/otto-scenarios/{project}/
+    scenario_dir = os.environ.get(
+        'OTTO_SCENARIO_DIR',
+        f'/var/otto-scenarios/{args.project}'
+    )
+    
+    # Start test server
+    server = subprocess.Popen(['python3', 'src/test_server.py'])
+    time.sleep(2)  # Wait for server startup
+    
+    try:
+        # Load and execute scenarios
+        results = run_all_scenarios(scenario_dir, args.verbose)
+        
+        # Write results
+        with open('/tmp/ralph-scenario-result.json', 'w') as f:
+            json.dump({'pass': all(r['pass'] for r in results)}, f)
+    finally:
+        server.terminate()
+
+if __name__ == '__main__':
+    main()
+```
 
 **Acceptance Criteria:**
 ```bash
-sudo python3 harness/scenario_harness.py --project otto-matic
-# Writes {"pass": true} or {"pass": false} to /tmp/ralph-scenario-result.json
+# Copy scenarios (requires sudo for /var/otto-scenarios/)
+sudo mkdir -p /var/otto-scenarios/urgent-alarm
+sudo cp scenarios/*.yaml /var/otto-scenarios/urgent-alarm/
+
+# Run harness
+sudo python3 harness/scenario_harness.py --project urgent-alarm
+# Should write {"pass": true} or {"pass": false} to /tmp/ralph-scenario-result.json
 ```
 
 ---
 
-### P1 — Foundation (Blocks Everything Else)
+### P1 — Database Schema Completion
 
-#### 1.2 Complete Data Persistence Layer
-**Priority:** P1  
-**Files:** `src/lib/database.py`, `src/lib/migrations.py`
+#### 1.2 Complete Schema (Spec §13)
+**File:** `src/test_server.py` (update `init_db()`)
 
-**Spec Reference:** Section 13
-
-**Schema Gaps (per spec):**
-
+**Missing columns per spec:**
 ```sql
--- MISSING from reminders:
+-- reminders table missing:
 origin_lat REAL,
 origin_lng REAL,
 origin_address TEXT,
 custom_sound_path TEXT,
 calendar_event_id TEXT
 
--- MISSING from anchors:
+-- anchors table missing:
 tts_fallback BOOLEAN DEFAULT FALSE,
 snoozed_to TEXT
 
--- MISSING from history:
+-- history table missing:
 actual_arrival TEXT,
 missed_reason TEXT
 
--- NEW TABLES needed:
+-- NEW tables needed:
 calendar_sync (...)
 custom_sounds (...)
-destination_adjustments (...)  -- Already partially exists
 ```
 
 **Tasks:**
-- [ ] Implement sequential migration system (`migrations.py`)
-- [ ] Add all missing columns per spec schema
+- [ ] Add all missing columns
 - [ ] Enable `PRAGMA foreign_keys = ON`
 - [ ] Enable `PRAGMA journal_mode = WAL`
+- [ ] Add cascade delete: `reminders → anchors`
 - [ ] Add `Database.getInMemoryInstance()` for tests
-- [ ] UUID v4 generation for all IDs
-- [ ] Cascade delete for reminders → anchors
-
-**Acceptance Tests:**
-- [ ] Fresh DB starts at current schema version
-- [ ] In-memory test DB works
-- [ ] Cascade deletes work (reminder → anchors)
-- [ ] FK violations return errors without crash
 
 ---
 
-#### 1.3 Complete Escalation Chain Engine
-**Priority:** P1  
-**Files:** `src/lib/chain_engine.py`
+### P1 — Chain Engine Enhancement
 
-**Spec Reference:** Section 2
+#### 1.3 Complete Chain Engine (Spec §2)
+**File:** `src/test_server.py` (update `compute_escalation_chain()`)
 
-**Current Gaps:**
-- Missing 20-24 min buffer compression
-- Missing `get_next_unfired_anchor(reminder_id)`
-- Missing `fire_count` tracking
-- Missing validation: `arrival > departure + minimum_drive_time`
+**Missing logic:**
+1. 20-24 min buffer compression (currently only 10-24 covered)
+2. `get_next_unfired_anchor(reminder_id)` function
+3. `fire_count` tracking
+4. Validation: `arrival > departure + minimum_drive_time`
 
-**Tasks:**
-- [ ] Implement `get_next_unfired_anchor(reminder_id)` for recovery
-- [ ] Add compressed chain for **20-24 min buffer** (currently only 10-24 covered)
-- [ ] Ensure determinism: same inputs = same outputs
-- [ ] Complete validation per spec
-- [ ] Track `fire_count` for retry logic
-
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | Full chain (≥25 min) | 8 anchors: 8:30, 8:35, 8:40, 8:45, 8:50, 8:55, 8:59, 9:00 |
-| TC-02 | Compressed chain (10-24 min) | 4-5 anchors, skip calm/casual |
-| TC-03 | Minimum chain (≤5 min) | 3 anchors: T-3, T-1, T-0 |
-| TC-04 | Invalid chain rejection | Error: "drive_duration exceeds time_to_arrival" |
-| TC-05 | Next unfired anchor recovery | Returns earliest unfired anchor |
-| TC-06 | Chain determinism | Same inputs = same outputs |
+**Current test scenarios that must pass:**
+| Input | Expected Anchors |
+|-------|-----------------|
+| 30 min drive | 8 anchors: 8:30, 8:35, 8:40, 8:45, 8:50, 8:55, 8:59, 9:00 |
+| 15 min drive | Compressed (skip calm/casual) |
+| 3 min drive | 3 anchors: T-3, T-1, T-0 |
 
 ---
 
-### P2 — Core Services
+### P2 — Adapter Interfaces
 
-#### 2.1 LLM Adapter Interface
-**Priority:** P2  
-**Files:** `src/lib/adapters/llm_adapter.py`, `src/lib/adapters/llm_mock.py`, `src/lib/adapters/keyword_fallback.py`
+#### 2.1 LLM Adapter (Spec §3)
+**Files:** `src/lib/adapters/llm_adapter.py`, `src/lib/adapters/llm_mock.py`
 
-**Spec Reference:** Section 3
+**Interface needed:**
+```python
+class ILanguageModelAdapter:
+    def parse(self, text: str) -> ParsedReminder: ...
+    def is_mock() -> bool: ...
 
-**Tasks:**
-- [ ] Define `ILanguageModelAdapter` abstract interface
-- [ ] Implement `MockLLMAdapter` for tests (returns predefined fixtures)
-- [ ] Implement `KeywordFallbackAdapter` (regex-based, confidence < 1.0)
-- [ ] Support formats: "X min drive", "in X minutes", "arrive at X"
-- [ ] Parse all 4 reminder types: countdown_event, simple_countdown, morning_routine, standing_recurring
+class MockLLMAdapter(ILanguageModelAdapter):
+    fixtures: dict[str, ParsedReminder]
+    
+class KeywordFallbackAdapter(ILanguageModelAdapter):
+    # Regex-based, confidence < 1.0
+```
 
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | Full NLP parse | destination, arrival_time, drive_duration extracted |
-| TC-02 | Simple countdown | reminder_type = "simple_countdown" |
-| TC-03 | Tomorrow date | arrival_time = next day's specified time |
-| TC-04 | LLM failure fallback | keyword extraction with confidence < 1.0 |
-| TC-05 | Manual correction | Edited values used for chain creation |
-| TC-06 | Unintelligible input | User-facing error message |
-| TC-07 | Mock adapter | No real API calls in test mode |
+**Supported formats:**
+- "X min drive", "X-minute drive"
+- "in X minutes"
+- "arrive at X", "check-in at X"
 
----
+#### 2.2 TTS Adapter (Spec §4)
+**Files:** `src/lib/adapters/tts_adapter.py`, `src/lib/adapters/tts_mock.py`
 
-#### 2.2 TTS Adapter Interface
-**Priority:** P2  
-**Files:** `src/lib/adapters/tts_adapter.py`, `src/lib/adapters/tts_mock.py`, `src/lib/tts_cache.py`
+**Interface needed:**
+```python
+class ITTSAdapter:
+    def generate(text: str, voice_id: str) -> bytes: ...
+    def cache_clip(reminder_id: str, anchor_id: str, audio: bytes): ...
 
-**Spec Reference:** Section 4
+class MockTTSAdapter(ITTSAdapter):
+    # Writes 1-second silent file for tests
+```
 
-**Tasks:**
-- [ ] Define `ITTSAdapter` abstract interface
-- [ ] Implement `MockTTSAdapter` (writes 1-second silent file)
-- [ ] Implement TTS cache (`/tts_cache/{reminder_id}/{anchor_id}.mp3`)
-- [ ] Cache invalidation on reminder delete
-- [ ] Fallback to system notification on TTS failure
-
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | TTS clip generation at creation | 8 MP3 files in cache |
-| TC-02 | Anchor fires from cache | No network call |
-| TC-03 | TTS fallback on API failure | tts_fallback = true |
-| TC-04 | TTS cache cleanup on delete | All files removed |
-| TC-05 | Mock TTS in tests | Local file written, no API call |
+**Cache structure:** `/tts_cache/{reminder_id}/{anchor_id}.mp3`
 
 ---
 
-#### 2.3 Voice Personality Enhancement
-**Priority:** P2  
-**Files:** `src/lib/voice_personalities.py`, `src/lib/message_generator.py`
+### P3 — Voice Personalities (Spec §10)
 
-**Spec Reference:** Section 10
+#### 3.1 Expand Message Templates
+**File:** `src/test_server.py` (update `VOICE_PERSONALITIES`)
 
-**Current State:** 1 template per tier per personality
+**Current state:** 1 template per tier per personality  
+**Required:** 3 message variations per tier per personality (5 × 8 × 3 = 120 messages)
 
-**Tasks:**
-- [ ] Add minimum **3 message variations** per tier per personality (5 × 8 × 3 = 120 messages)
-- [ ] Random selection or rotation
-- [ ] Custom prompt support (max 200 chars)
-- [ ] Personality immutability for existing reminders
-
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | Coach personality at T-5 | Motivational language with "!" |
-| TC-02 | No-nonsense at T-5 | Brief, direct, no filler |
-| TC-03 | Custom personality | Tone reflects custom prompt |
-| TC-04 | Personality immutability | Existing reminders keep original |
-| TC-05 | Message variation | 3 calls → at least 2 distinct outputs |
+**Example for Coach at T-5:**
+```python
+'urgent': [
+    "Let's GO! You've got {remaining} minutes to {dest}!",
+    "Time to move! {dest} in {remaining} minutes!",
+    "Chop chop! {remaining} minutes — {dest}!",
+]
+```
 
 ---
 
-### P3 — Notifications & Scheduling
+### P3 — History & Stats (Spec §11)
 
-#### 3.1 Notification Behavior System
-**Priority:** P2  
-**Files:** `src/lib/notification_service.py`
+#### 3.2 Complete Stats
+**File:** `src/test_server.py` (update/add endpoints)
 
-**Spec Reference:** Section 5
+**Missing:**
+1. "Common miss window" identification
+2. Streak counter for recurring reminders
+3. Drive duration adjustment cap (+15 min max)
+4. 90-day retention with archive
 
-**Tasks:**
-- [ ] Urgency tier → notification sound mapping
-- [ ] DND detection and suppression logic
-- [ ] Quiet hours (default: 10pm-7am, configurable)
-- [ ] Overdue anchor handling (15-min grace window)
-- [ ] Chain overlap serialization queue
-- [ ] T-0 alarm looping until user action
-
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | DND early anchor suppressed | Silent notification, no TTS |
-| TC-02 | DND final 5-minute override | Visual + vibration, TTS plays |
-| TC-03 | Quiet hours suppression | Anchor suppressed, queued |
-| TC-04 | Overdue anchor drop (15 min rule) | Anchor dropped, chain continues |
-| TC-05 | Chain overlap serialization | New anchor queued |
-| TC-06 | T-0 alarm loops | Loops until user action |
+**New endpoints needed:**
+```
+GET  /stats/common-miss-window
+GET  /stats/streaks
+POST /stats/adjustment
+```
 
 ---
 
-#### 3.2 Background Scheduling
-**Priority:** P3  
-**Files:** `src/lib/background_scheduler.py`
+## Validation Commands
 
-**Spec Reference:** Section 6
+```bash
+# 1. Start test server
+python3 src/test_server.py &
+sleep 2
 
-**Tasks:**
-- [ ] Notifee integration (placeholder for mobile)
-- [ ] Recovery scan on app launch
-- [ ] Re-register pending anchors on crash recovery
-- [ ] Late fire warning (>60s delay)
+# 2. Run pytest (when harness is created)
+python3 -m pytest harness/
 
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | Anchor scheduling | 8 Notifee tasks registered |
-| TC-02 | Background fire with app closed | Anchor fires via notification |
-| TC-03 | Recovery scan on launch | Overdue anchors fire within grace window |
-| TC-04 | Overdue anchor drop | >15 min overdue → dropped, logged |
-| TC-05 | Pending anchors re-registered | After crash, anchors re-registered |
-| TC-06 | Late fire warning | >60s delay → warning log entry |
+# 3. Run harness manually (requires sudo)
+sudo python3 harness/scenario_harness.py --project urgent-alarm
 
----
-
-### P4 — Mobile Features
-
-#### 4.1 Location Awareness
-**Priority:** P3  
-**Files:** `src/lib/location_service.py`
-
-**Spec Reference:** Section 8
-
-**Tasks:**
-- [ ] Single location check at departure anchor only
-- [ ] 500m geofence comparison
-- [ ] Immediate critical tier if at origin
-- [ ] Location permission request on first use
-
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | User still at origin | Critical tier fires immediately |
-| TC-02 | User already left | Normal chain proceeds |
-| TC-03 | Location permission request | Requested at first location-aware reminder |
-| TC-04 | Location permission denied | Reminder created without escalation, note shown |
-| TC-05 | Single location check only | Only 1 API call per reminder |
-
----
-
-#### 4.2 Calendar Integration
-**Priority:** P3  
-**Files:** `src/lib/adapters/calendar_adapter.py`, `src/lib/adapters/eventkit_adapter.py`, `src/lib/adapters/google_calendar_adapter.py`
-
-**Spec Reference:** Section 7
-
-**Tasks:**
-- [ ] `ICalendarAdapter` interface
-- [ ] Apple Calendar adapter placeholder (EventKit)
-- [ ] Google Calendar adapter placeholder
-- [ ] Suggestion card generation
-- [ ] Recurring event handling
-
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | Apple Calendar event suggestion | Suggestion card appears |
-| TC-02 | Google Calendar event suggestion | Suggestion card appears |
-| TC-03 | Suggestion → reminder creation | countdown_event reminder created |
-| TC-04 | Permission denial handling | Explanation banner with settings link |
-| TC-05 | Sync failure graceful degradation | Manual reminders still work |
-| TC-06 | Recurring event handling | Reminder for each occurrence |
-
----
-
-#### 4.3 Snooze & Dismissal
-**Priority:** P3  
-**Files:** `src/lib/snooze_service.py`, `src/lib/dismissal_service.py`
-
-**Spec Reference:** Section 9
-
-**Tasks:**
-- [ ] Tap snooze (1 min default)
-- [ ] Custom snooze picker (1, 3, 5, 10, 15 min)
-- [ ] Chain re-computation after snooze
-- [ ] Swipe-to-dismiss feedback prompt
-- [ ] TTS snooze confirmation
-- [ ] Snooze persistence across app restarts
-
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | Tap snooze | Current anchor snoozed 1 min, TTS confirms |
-| TC-02 | Custom snooze | Picker appears, anchors shifted |
-| TC-03 | Chain re-computation after snooze | Anchors re-centered around now |
-| TC-04 | Dismissal feedback — timing correct | No adjustment made |
-| TC-05 | Dismissal feedback — left too late | drive_duration +2 min |
-| TC-06 | Snooze persistence after restart | Snooze offset retained |
-
----
-
-### P5 — Stats & Feedback
-
-#### 5.1 Complete History & Stats
-**Priority:** P3  
-**Files:** `src/lib/stats_service.py`, `src/lib/feedback_loop.py`
-
-**Spec Reference:** Section 11
-
-**Tasks:**
-- [ ] Hit rate calculation (trailing 7 days)
-- [ ] "Common miss window" identification
-- [ ] Streak counter (increment on hit, reset on miss)
-- [ ] Drive duration adjustment (cap: +15 min)
-- [ ] 90-day retention with archive
-
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | Hit rate calculation | 4 hits, 1 miss = 80% |
-| TC-02 | Feedback loop — drive duration | +2 min per late feedback |
-| TC-03 | Feedback loop cap | Max +15 min |
-| TC-04 | Common miss window | Returns most missed tier |
-| TC-05 | Streak increment on hit | Streak +1 |
-| TC-06 | Streak reset on miss | Streak = 0 |
-
----
-
-### P6 — Sound Library
-
-#### 6.1 Sound Library
-**Priority:** P4  
-**Files:** `src/lib/sound_library.py`, `src/lib/sound_importer.py`
-
-**Spec Reference:** Section 12
-
-**Tasks:**
-- [ ] Built-in sounds (5 per category: Commute, Routine, Errand)
-- [ ] Custom audio import (MP3, WAV, M4A, max 30s)
-- [ ] Per-reminder sound selection
-- [ ] Corrupted sound fallback
-
-**Test Scenarios (from spec):**
-| ID | Scenario | Expected |
-|----|----------|----------|
-| TC-01 | Built-in sound playback | No network access required |
-| TC-02 | Custom sound import | File appears in picker |
-| TC-03 | Custom sound playback | Custom sound plays under TTS |
-| TC-04 | Corrupted sound fallback | Category default plays, error logged |
-| TC-05 | Sound persistence on edit | Sound selection retained |
-
----
-
-## Otto Harness Tests (P0)
-
-Per spec Section 14, the test suite must cover:
-
-### Unit Tests
-- [ ] Chain engine determinism (TC-06)
-- [ ] Parser fixtures (TC-01 to TC-07 from §3)
-- [ ] TTS adapter mock (TC-05 from §4)
-- [ ] LLM adapter mock (TC-07 from §3)
-- [ ] Keyword extraction (TC-04 from §3)
-- [ ] Schema validation (TC-01 to TC-05 from §13)
-- [ ] Database operations (cascade, FK enforcement)
-
-### Integration Tests
-- [ ] Parse → chain → TTS → persist
-- [ ] Anchor firing (schedule → fire → mark fired)
-- [ ] Snooze recovery (snooze → recompute → re-register)
-- [ ] Feedback loop (dismiss → feedback → adjustment applied)
-
-### E2E Tests (future - Detox)
-- [ ] Quick Add flow
-- [ ] Reminder confirmation
-- [ ] Anchor firing sequence
-- [ ] Snooze interaction
-- [ ] Dismissal feedback
-- [ ] Settings navigation
-- [ ] Sound library browsing
+# 4. Lint check
+python3 -m py_compile src/test_server.py
+```
 
 ---
 
@@ -452,38 +333,19 @@ Per spec Section 14, the test suite must cover:
 ```
 harness/scenario_harness.py (P0) ───────────────────────┐
                                                         │
-src/lib/database.py (P1) ──────────────────────────────┤
+src/test_server.py (P1) ────────────────────────────────┤
     │                                                  │
-    ▼                                                  │
-src/lib/chain_engine.py (P1)                          │
-    │                                                  │
-    ├──────────────────────────────────────────┐       │
-    ▼                                          ▼       │
-src/lib/adapters/llm_adapter.py (P2)    src/lib/voice_personalities.py (P2)
-    │                                          │       │
-    ├─────────────────────┐                    │       │
-    ▼                     ▼                    │       │
-src/lib/adapters/tts_adapter.py (P2)            │       │
-    │                                          │       │
-    ▼                                          ▼       │
-src/lib/notification_service.py (P3)  src/lib/stats_service.py (P3)
-    │                                          │       │
-    └─────────────────────┬───────────────────┘       │
-                          ▼                           ▼
-                  All tests pass ◄─────────────────────┘
+    ├── init_db() — Database schema                   │
+    ├── compute_escalation_chain() — Chain engine     │
+    ├── parse_reminder_natural() — Parser              │
+    └── VOICE_PERSONALITIES — Voice templates         │
+                                                        │
+src/lib/adapters/ (P2)                                 │
+    ├── llm_adapter.py                                 │
+    └── tts_adapter.py                                 │
+                                                        │
+All scenarios pass ◄────────────────────────────────────┘
 ```
-
----
-
-## Quick Wins (First Iteration)
-
-For Otto's first few iterations:
-
-1. **Create `harness/scenario_harness.py`** — Otto cannot run without this
-2. **Complete database schema** — Low risk, enables proper tests
-3. **Add `get_next_unfired_anchor()`** — Simple function, unlocks recovery
-4. **Expand voice message templates** — 3 variations each (120 messages)
-5. **Add "common miss window" to stats** — Simple SQL aggregation
 
 ---
 
@@ -492,10 +354,21 @@ For Otto's first few iterations:
 - Password reset / account management (v1: local-only)
 - Smart home integration (Hue lights, etc.)
 - Voice reply / spoken snooze ("snooze 5 min")
-- Multi-device sync (future consideration)
+- Multi-device sync
 - Bluetooth audio routing preference
-- Database encryption (future consideration)
+- Database encryption
 - Full-text search on destinations
+
+---
+
+## File Path Corrections
+
+| AGENTS.md says | Actual file |
+|----------------|-------------|
+| `src/web.py` | `src/test_server.py` (does not exist as web.py) |
+| `python3 src/web.py &` | `python3 src/test_server.py &` |
+
+**Note:** The actual server file is `src/test_server.py`. Update AGENTS.md if needed.
 
 ---
 
