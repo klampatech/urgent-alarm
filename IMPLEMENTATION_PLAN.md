@@ -1,9 +1,9 @@
 # Urgent Alarm - Implementation Plan
 
-**Generated:** 2026-04-08  
-**Spec Version:** urgent-voice-alarm-app-2026-04-08.spec.md  
-**Spec Sections:** 14 (2-13 covering features, Section 1 overview, Section 14 definition of done)  
-**Test Scenarios:** 47 TC cases (6+ per section)  
+**Generated:** 2026-04-08
+**Spec Version:** urgent-voice-alarm-app-2026-04-08.spec.md
+**Spec Sections:** 14 (2-13 covering features, Section 1 overview, Section 14 definition of done)
+**Test Scenarios:** 47 TC cases (6+ per section)
 **Scenario Files:** 16 YAML files in `scenarios/`
 
 ---
@@ -12,7 +12,7 @@
 
 | Component | Status | Gap |
 |-----------|--------|-----|
-| **Testing Harness** | ❌ Missing | `harness/scenario_harness.py` does not exist |
+| **Testing Harness** | ❌ **Missing** | `harness/` directory is empty — **scenario_harness.py must be created from scratch** |
 | **Chain Engine** | ⚠️ Buggy | Compression logic doesn't match spec for 10-24 min buffers |
 | **Database Schema** | ⚠️ Incomplete | Missing 6 columns, 3 tables per spec Section 13 |
 | **LLM Parser** | ⚠️ Partial | Keyword extraction works; no LLM adapter interface |
@@ -26,7 +26,7 @@
 | **Snooze Flow** | ❌ Not implemented | No tap/hold snooze, chain re-computation |
 | **Sound Library** | ❌ Not implemented | No built-in sounds or custom import |
 
-**Current Implementation:** ~35% (core engine present but incomplete)
+**Current Implementation:** ~30% (core engine present but incomplete — harness missing entirely)
 
 ---
 
@@ -34,11 +34,15 @@
 
 These items block all other work:
 
-### 1. Create Testing Harness ⚠️ CRITICAL
-**Location:** `harness/scenario_harness.py` (missing)  
+### 1. Create Testing Harness ⚠️ **CRITICAL — HARNESS DIRECTORY IS EMPTY**
+
+**Location:** `harness/scenario_harness.py` (**MUST BE CREATED FROM SCRATCH** — directory exists but file is missing)
+
 **Impact:** Cannot validate any of the 16 scenario files
 
-**Required Features:**
+**Important:** Per AGENTS.md validation rules, the harness is what enables `python3 -m pytest harness/` and scenario execution via `sudo python3 harness/scenario_harness.py --project otto-matic`
+
+**Required Features:****
 - YAML scenario parser
 - HTTP assertion checker (status, body)
 - DB assertion checker (record existence, field values)
@@ -77,7 +81,7 @@ scenarios/reminder-creation-cascade-delete.yaml # TC-03: cascade delete
 ---
 
 ### 2. Fix Chain Engine Compression Logic ⚠️ HIGH PRIORITY
-**Location:** `src/test_server.py` - `compute_escalation_chain()` function  
+**Location:** `src/test_server.py` - `compute_escalation_chain()` function
 **Spec:** Section 2.3, TC-01 through TC-06
 
 **Spec Requirements vs Current:**
@@ -118,7 +122,7 @@ For 15 min buffer: T-10 (urgent), T-5 (pushing), T-4 (firm), T-1 (critical), T-0
 ---
 
 ### 3. Complete Database Schema ⚠️ HIGH PRIORITY
-**Location:** `src/test_server.py` - `init_db()` function  
+**Location:** `src/test_server.py` - `init_db()` function
 **Spec:** Section 13, Table Schema
 
 **Current `reminders` table columns:**
@@ -185,7 +189,7 @@ For 15 min buffer: T-10 (urgent), T-5 (pushing), T-4 (firm), T-1 (critical), T-0
 ## Core Engine Completion
 
 ### 4. Complete Voice Personality System
-**Location:** `src/test_server.py` - `VOICE_PERSONALITIES` dict  
+**Location:** `src/test_server.py` - `VOICE_PERSONALITIES` dict
 **Spec:** Section 10
 
 **Current State:**
@@ -221,7 +225,7 @@ custom:       User-defined (max 200 chars)
 ---
 
 ### 5. Add LLM Adapter Interface
-**Location:** `src/parser/llm_adapter.py` (new file)  
+**Location:** `src/parser/llm_adapter.py` (new file)
 **Spec:** Section 3
 
 **Tasks:**
@@ -259,7 +263,7 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 6. Complete Stats System
-**Location:** `src/stats/` (new module)  
+**Location:** `src/stats/` (new module)
 **Spec:** Section 11
 
 **Current Issues in `calculate_hit_rate()`:**
@@ -297,7 +301,7 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ## Feature Implementation
 
 ### 7. TTS System (Voice Generation)
-**Location:** `src/tts/` (new module)  
+**Location:** `src/tts/` (new module)
 **Spec:** Section 4
 
 **Tasks:**
@@ -320,7 +324,7 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 8. Snooze & Dismissal Flow
-**Location:** `src/snooze/` (new module)  
+**Location:** `src/snooze/` (new module)
 **Spec:** Section 9
 
 **Tasks:**
@@ -330,7 +334,7 @@ class AnthropicAdapter(ILanguageModelAdapter):
 | Implement custom snooze | Picker: 1, 3, 5, 10, 15 min options |
 | Re-compute chain | Shift remaining anchors by snooze duration |
 | Re-register anchors | New timestamps with scheduler |
-| Implement dismissal | Feedback prompt: "You missed [destination] — timing right?" |
+| Implement dismissal | Feedback prompt: "You missed [destination] - timing right?" |
 | Process feedback | Store + adjust drive estimates (+2 min per "left too late") |
 | TTS confirmation | "Okay, snoozed X minutes" |
 | Persist snooze | Survive app restart with adjusted timestamps |
@@ -346,7 +350,7 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 9. Notification & Alarm Behavior
-**Location:** `src/notifications/` (new module)  
+**Location:** `src/notifications/` (new module)
 **Spec:** Section 5
 
 **Tasks:**
@@ -372,7 +376,7 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 10. Background Scheduling
-**Location:** `src/scheduler/` (new module)  
+**Location:** `src/scheduler/` (new module)
 **Spec:** Section 6
 
 **Tasks:**
@@ -399,7 +403,7 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ## Integration Implementation
 
 ### 11. Calendar Integration
-**Location:** `src/calendar/` (new module)  
+**Location:** `src/calendar/` (new module)
 **Spec:** Section 7
 
 **Tasks:**
@@ -425,7 +429,7 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 12. Location Awareness
-**Location:** `src/location/` (new module)  
+**Location:** `src/location/` (new module)
 **Spec:** Section 8
 
 **Tasks:**
@@ -447,7 +451,7 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 13. Sound Library
-**Location:** `src/sounds/` (new module)  
+**Location:** `src/sounds/` (new module)
 **Spec:** Section 12
 
 **Tasks:**
