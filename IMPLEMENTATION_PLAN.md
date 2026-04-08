@@ -157,7 +157,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-#### 6. TTS Adapter Interface & Mock
+#### 6. TTS Adapter Interface & Mock ✅ COMPLETED
 **Spec Ref:** Section 4.3, 4.4
 **Task:** Create mock-able TTS adapter for pre-generation
 - Define `ITTSAdapter` interface
@@ -167,6 +167,8 @@ This document maps the specification requirements to implementation tasks, prior
 - Handle fallback on API failure (system sound + text)
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/adapters/tts_adapter.py`, `src/backend/adapters/mock_tts.py`
+
+> **Implementation notes:** Implemented ITTSAdapter interface in `tts_adapter.py` with TTSResult dataclass and TTSError. Created ElevenLabsAdapter in `elevenlabs_adapter.py` with API integration, voice presets, and caching at `/tmp/tts_cache/{reminder_id}/`. MockTTSAdapter in `mock_tts.py` creates minimal valid MP3 placeholders. Verified with import tests.
 
 #### 7. History, Stats & Feedback Loop ✅ COMPLETED
 **Spec Ref:** Section 11.3, 11.4
