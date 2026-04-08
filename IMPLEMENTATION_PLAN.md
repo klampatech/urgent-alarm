@@ -1,436 +1,356 @@
-# Urgent Voice Alarm - Implementation Plan
+# Implementation Plan: Urgent Voice Alarm
 
 ## Project Overview
 
-This plan addresses gaps between `specs/urgent-voice-alarm-app-2026-04-08.spec.md` and the current codebase (`src/test_server.py`).
+A mobile alarm app that speaks escalating urgency messages, adapting based on remaining time and context. Users set reminders like "leave for Parker Dr in 30 minutes" and the app progressively nags with escalating messages.
 
-**Current State:** Basic chain computation, keyword parsing, and voice message templates exist. Most features are unimplemented.
+## Gap Analysis Summary
 
----
+**Current State:** `src/test_server.py` is a basic Python HTTP test server with minimal implementations of:
+- Simple chain computation (partial)
+- Keyword-based reminder parsing
+- Template-based voice messages
+- Basic SQLite schema
 
-## Phase 1: Foundation (Data Layer & Core Engine)
-
-### 1.1 Complete Database Schema & Migrations
-**Priority:** P0 (blocking all other work)
-
-**Current:**
-- Partial schema with 5 tables
-- No migration system
-
-**Required:**
-- [ ] Implement versioned migration system (`migrations/` directory)
-- [ ] Add missing tables: `calendar_sync`, `custom_sounds`
-- [ ] Add missing fields to `reminders`: `origin_lat`, `origin_lng`, `origin_address`, `calendar_event_id`, `custom_sound_path`
-- [ ] Add missing fields to `anchors`: `snoozed_to`, `tts_fallback`
-- [ ] Add missing fields to `history`: `actual_arrival`, `missed_reason`
-- [ ] Enable `PRAGMA foreign_keys = ON` and `PRAGMA journal_mode = WAL`
-- [ ] Create `lib/database.py` with:
-  - `Database.get_instance()` / `Database.get_in_memory_instance()`
-  - `Database.run_migrations()`
-  - `Database.get_next_unfired_anchor(reminder_id)`
-
-**Files:**
-- `src/lib/database.py` (new)
-- `src/migrations/` (new directory with `001_initial_schema.py`, etc.)
+**Not Yet Implemented (per spec):** All core systems below.
 
 ---
 
-### 1.2 Enhance Chain Engine
-**Priority:** P0 (blocking all other work)
+## Priority 1: Foundation (Must Have First)
 
-**Current:**
-- Basic `compute_escalation_chain()` with some tier logic
-- Simple validation
+### 1.1 [ ] Complete Data Persistence Layer
+**Why first:** All other systems depend on SQLite storage.
 
-**Required:**
-- [ ] Implement `get_next_unfired_anchor(reminder_id)` function
-- [ ] Add comprehensive validation: `arrival_time > departure_time + minimum_drive_time`
-- [ ] Add `snoozed_to` handling in chain re-computation
-- [ ] Add chain determinism (seeded randomness for variations)
-- [ ] Update `/chain/` endpoint to accept `reminder_id` for recovery
+**Tasks:**
+- [ ] Implement full schema from spec Section 13.3 (`reminders`, `anchors`, `history`, `user_preferences`, `destination_adjustments`, `calendar_sync`, `custom_sounds`)
+- [ ] Add missing reminder fields: `custom_sound_path`, `origin_lat`, `origin_lng`, `origin_address`, `calendar_event_id`
+- [ ] Enable WAL mode (`PRAGMA journal_mode = WAL`)
+- [ ] Enable foreign key enforcement (`PRAGMA foreign_keys = ON`)
+- [ ] Implement sequential migration system (start at schema_v1)
+- [ ] UUID v4 generation for all primary keys
+- [ ] ISO 8601 timestamp handling (UTC storage, local display)
 
-**Files:**
-- `src/lib/chain_engine.py` (new - extract from test_server.py)
-- `src/test_chain_engine.py` (new - TC-01 through TC-06 from spec)
+**Dependencies:** None
 
 ---
 
-### 1.3 LLM Adapter Interface
-**Priority:** P1 (needed for reminder creation)
+### 1.2 [ ] Complete Escalation Chain Engine
+**Why first:** Core app logic; all reminders need anchors.
 
-**Current:**
-- Keyword extraction only in `parse_reminder_natural()`
+**Tasks:**
+- [ ] Implement `compute_escalation_chain(arrival_time, drive_duration)` matching spec rules:
+  - buffer ≥ 25 min: 8 anchors (full)
+  - buffer 20-24 min: 7 anchors (skip calm)
+  - buffer 10-19 min: 5 anchors (start at urgent)
+  - buffer 5-9 min: 3 anchors (firm, critical, alarm)
+  - buffer 1-4 min: 2 anchors (firm, alarm)
+- [ ] Implement `get_next_unfired_anchor(reminder_id)` for scheduler recovery
+- [ ] Add validation: `arrival_time > departure_time + minimum_drive_time`
+- [ ] Ensure deterministic output for unit testing
+- [ ] Store anchor records with: `id`, `reminder_id`, `timestamp`, `urgency_tier`, `tts_clip_path`, `tts_fallback`, `fired`, `fire_count`, `snoozed_to`
+- [ ] Implement `get_anchors_sorted_by_timestamp(reminder_id)`
 
-**Required:**
-- [ ] Define `ILanguageModelAdapter` abstract interface
-- [ ] Implement `MiniMaxAdapter` (Anthropic-compatible API)
-- [ ] Implement `AnthropicAdapter` for direct Anthropic API
-- [ ] Implement `MockLanguageModelAdapter` for testing (returns fixture responses)
-- [ ] Implement keyword extraction fallback when LLM fails
-- [ ] Add reminder_type enum detection in parser
-
-**Files:**
-- `src/lib/adapters/llm_adapter.py` (new - interface + implementations)
-- `src/lib/parser.py` (new - orchestrates LLM + fallback)
-
----
-
-## Phase 2: Core Features
-
-### 2.1 TTS Adapter & Voice Generation
-**Priority:** P1 (needed before reminders can fire with audio)
-
-**Current:**
-- Static message templates in `VOICE_PERSONALITIES`
-- Single template per tier
-
-**Required:**
-- [ ] Define `ITTSAdapter` abstract interface
-- [ ] Implement `ElevenLabsAdapter` with voice ID mapping
-- [ ] Implement `MockTTSAdapter` for testing
-- [ ] Add message variations (minimum 3 per tier per personality)
-- [ ] Implement `generate_message_variation()` with seeded randomness
-- [ ] Add custom prompt support (append to system prompt)
-- [ ] Create `lib/tts_cache.py` for file management
-
-**Files:**
-- `src/lib/adapters/tts_adapter.py` (new - interface + implementations)
-- `src/lib/voice_personalities.py` (new - message templates with variations)
+**Dependencies:** 1.1 Data Persistence
 
 ---
 
-### 2.2 Reminder Service
-**Priority:** P1 (user-facing feature)
+### 1.3 [ ] LLM Adapter Interface & Parser
+**Why first:** Natural language input is the primary UX entry point.
 
-**Current:**
-- Basic `/reminders` POST endpoint
-- No confirmation flow
+**Tasks:**
+- [ ] Create `ILanguageModelAdapter` abstract interface
+- [ ] Implement `MiniMaxAdapter` (primary, Anthropic-compatible)
+- [ ] Implement `AnthropicAdapter` (fallback)
+- [ ] Implement `MockLanguageModelAdapter` for tests
+- [ ] Implement keyword extraction fallback (regex patterns):
+  - "X min drive", "X-minute drive", "in X minutes"
+  - "arrive at X", "check-in at X"
+  - "tomorrow Xpm", "today Xam"
+- [ ] Parse fields: `destination`, `arrival_time` (ISO 8601), `drive_duration`, `reminder_type`
+- [ ] Return `confidence_score` from keyword fallback
+- [ ] Reject unintelligible input with user-facing error
 
-**Required:**
-- [ ] Create `ReminderService.create_reminder()` that:
-  1. Parses input via parser
-  2. Returns parsed result for user confirmation (not immediate creation)
-  3. Creates reminder + anchors after confirmation
-  4. Triggers TTS generation for all anchors
-- [ ] Add `ReminderService.update_reminder()` with field correction support
-- [ ] Add `ReminderService.delete_reminder()` with cascade and TTS cache cleanup
-- [ ] Add destination adjustment lookup from `destination_adjustments` table
-
-**Files:**
-- `src/lib/reminder_service.py` (new)
+**Dependencies:** 1.1 Data Persistence
 
 ---
 
-### 2.3 Notification Service
-**Priority:** P1 (needed for reminders to be heard)
+## Priority 2: Core Features (User-Facing)
 
-**Current:**
-- None
+### 2.1 [ ] Voice & TTS Generation System
+**Why second:** Pre-generated clips eliminate runtime latency.
 
-**Required:**
-- [ ] Implement 4-tier notification sounds:
-  - Calm/Casual → gentle chime
-  - Pointed/Urgent → pointed beep
-  - Pushing/Firm → urgent siren
-  - Critical/Alarm → looping alarm
-- [ ] Implement DND awareness:
-  - Early anchors → silent notification
-  - Final 5 minutes → visual override + vibration
-- [ ] Implement quiet hours suppression (configurable start/end)
-- [ ] Implement overdue anchor queue (fire after DND/quiet hours end)
-- [ ] Implement 15-minute overdue drop rule
-- [ ] Implement chain overlap serialization (queue new anchors)
-- [ ] T-0 alarm must loop until user action
+**Tasks:**
+- [ ] Create `ITTSAdapter` abstract interface
+- [ ] Implement `ElevenLabsAdapter` with:
+  - Voice ID mapping per personality
+  - Custom prompt passthrough
+  - Async API with polling (30s timeout)
+  - Error handling + fallback to system sound
+- [ ] Implement `MockTTSAdapter` for tests
+- [ ] Implement TTS cache manager:
+  - Storage: `/tts_cache/{reminder_id}/{anchor_id}.mp3`
+  - Cleanup on reminder deletion
+  - Validation on load (file exists)
+- [ ] Fallback behavior: system notification sound + text body if TTS fails
+- [ ] Generate clips at reminder creation only
 
-**Files:**
-- `src/lib/notification_service.py` (new)
+**Dependencies:** 1.1 Data Persistence, 2.3 Voice Personality System
 
 ---
 
-### 2.4 Background Scheduling
-**Priority:** P1 (needed for reliable reminder firing)
+### 2.2 [ ] Voice Personality System
+**Why concurrent with TTS:** Personality defines message generation.
 
-**Current:**
-- None
+**Tasks:**
+- [ ] Implement 5 built-in personalities: Coach, Assistant, Best Friend, No-nonsense, Calm
+- [ ] Define per-personality: `voice_id`, `system_prompt` fragment, tier templates
+- [ ] Implement Custom mode: user prompt (max 200 chars) appended to generation
+- [ ] Store selected personality in `user_preferences`
+- [ ] Generate 3+ message variations per tier per personality
+- [ ] Message templates must include: `{dest}`, `{dur}`, `{remaining}`, `{plural}`
+- [ ] `generate_voice_message()` function for TTS adapter
 
-**Required:**
-- [ ] Implement `NotifeeScheduler` (abstract scheduler interface)
-- [ ] Implement `iOSBackgroundScheduler` using BGTaskScheduler
-- [ ] Implement `AndroidBackgroundScheduler` using WorkManager
+**Dependencies:** None (foundational)
+
+---
+
+### 2.3 [ ] Reminder Quick Add Flow
+**Why second:** Primary user interaction.
+
+**Tasks:**
+- [ ] Create reminder form (text/speech input)
+- [ ] Send input to LLM parser → get parsed result
+- [ ] Display confirmation card with parsed fields
+- [ ] Allow manual field correction before confirm
+- [ ] On confirm: validate → compute chain → queue TTS generation
+- [ ] Persist reminder with status "pending"
+- [ ] Show progress indicator during TTS generation
+- [ ] Handle reminder types: `countdown_event`, `simple_countdown`, `morning_routine`, `standing_recurring`
+
+**Dependencies:** 1.3 LLM Adapter, 2.1 TTS System
+
+---
+
+### 2.4 [ ] Notification & Alarm Behavior
+**Why second:** Users must receive reminders reliably.
+
+**Tasks:**
+- [ ] Implement notification tier escalation:
+  - calm/casual: gentle chime
+  - pointed/urgent: pointed beep
+  - pushing/firm: urgent siren
+  - critical/alarm: looping alarm
+- [ ] Implement DND handling:
+  - Pre-5-min anchors during DND: silent notification only
+  - Final 5 min during DND: visual override + vibration + TTS
+- [ ] Implement quiet hours (configurable, default 10pm-7am)
+- [ ] Implement overdue anchor queue (≤15 min: fire after restriction; >15 min: drop)
+- [ ] Implement chain overlap serialization
+- [ ] Implement T-0 alarm loop (until dismiss/snooze)
+- [ ] Notification display: destination, time remaining, personality icon
+
+**Dependencies:** 2.1 TTS System, 2.2 Voice System
+
+---
+
+### 2.5 [ ] Snooze & Dismissal Flow
+**Why third:** Interaction with active reminders.
+
+**Tasks:**
+- [ ] Tap snooze: pause 1 minute, TTS "Okay, snoozed 1 minute"
+- [ ] Tap-and-hold snooze: picker with 1, 3, 5, 10, 15 min options
+- [ ] Implement chain re-computation after snooze:
+  - Shift remaining anchors by snooze duration
+  - Re-register with Notifee with new timestamps
+- [ ] Swipe-to-dismiss: show feedback prompt
+- [ ] Feedback options: "Yes — timing was right" / "No — timing was off"
+- [ ] If "timing was off": show "Left too early" / "Left too late" / "Other"
+- [ ] Store feedback in `history` table
+- [ ] TTS confirmation for all snooze actions
+- [ ] Persist snooze state for app restart recovery
+
+**Dependencies:** 2.4 Notification System, 1.1 Data Persistence
+
+---
+
+### 2.6 [ ] History, Stats & Feedback Loop
+**Why concurrent:** Uses existing data structures.
+
+**Tasks:**
+- [ ] Calculate hit rate: `count(outcome='hit') / count(outcome!='pending') * 100` for 7 days
+- [ ] Implement destination adjustment: `adjusted_drive_duration = original + (late_count * 2min)`, capped at +15 min
+- [ ] Identify common miss window (most frequently missed urgency tier)
+- [ ] Implement streak counter for standing/recurring reminders
+- [ ] Store all history in `history` table (90-day retention)
+- [ ] Archive data older than 90 days (accessible, not deleted)
+- [ ] Stats derived entirely from history table (no separate store)
+
+**Dependencies:** 2.5 Snooze Flow, 1.1 Data Persistence
+
+---
+
+## Priority 3: Background & Platform Integration
+
+### 3.1 [ ] Background Scheduling (Notifee)
+**Why third:** Reminders must fire when app is closed.
+
+**Tasks:**
+- [ ] Integrate Notifee for iOS/Android background tasks
+- [ ] Register each anchor as individual Notifee task with trigger timestamp
+- [ ] iOS: use BGAppRefreshTask for timing, BGProcessingTask for TTS pre-warm
 - [ ] Implement recovery scan on app launch:
-  - Query all unfired anchors
-  - Fire those within 15-minute grace window
-  - Drop those >15 minutes overdue (log `missed_reason`)
-- [ ] Re-register pending anchors on crash recovery
-- [ ] Log warning for anchors firing >60 seconds late
+  - Find overdue unfired anchors within 15-min grace window
+  - Fire them in timestamp order
+  - Drop anchors >15 min overdue, log with `missed_reason`
+- [ ] Re-register all pending anchors on app restart after crash
+- [ ] Log warning if anchor fires >60s after scheduled time
+- [ ] Persist all anchor state to SQLite (survives termination)
 
-**Files:**
-- `src/lib/scheduler.py` (new - interface)
-- `src/lib/platform/ios_scheduler.py` (new)
-- `src/lib/platform/android_scheduler.py` (new)
-- `src/lib/recovery.py` (new)
+**Dependencies:** 1.2 Chain Engine, 2.4 Notification System
 
 ---
 
-### 2.5 Snooze & Dismissal Flow
-**Priority:** P2 (depends on notification service)
+### 3.2 [ ] Calendar Integration
+**Why fourth:** Optional but high-value feature.
 
-**Current:**
-- None
+**Tasks:**
+- [ ] Create `ICalendarAdapter` abstract interface
+- [ ] Implement `AppleCalendarAdapter` (EventKit, iOS)
+- [ ] Implement `GoogleCalendarAdapter` (Google Calendar API)
+- [ ] Implement calendar sync:
+  - On app launch, every 15 min while app open, via background refresh
+  - Only events with `location` field
+- [ ] Surface suggestion card for location events
+- [ ] On confirm: create countdown_event reminder with event data
+- [ ] Calendar-sourced reminders: show calendar icon
+- [ ] Handle recurring events (generate reminder per occurrence)
+- [ ] Permission denial: show explanation banner with settings link
+- [ ] Sync failure: graceful degradation, error banner
 
-**Required:**
-- [ ] Implement tap snooze (1 minute default)
-- [ ] Implement tap-and-hold custom snooze picker (1, 3, 5, 10, 15 min)
-- [ ] Implement chain re-computation after snooze (shift remaining anchors)
-- [ ] Implement re-registration of snoozed anchors with Notifee
-- [ ] Implement swipe-to-dismiss feedback prompt:
-  - "You missed [destination] — was the timing right? [Yes] [No]"
-  - If "No": "What was wrong? [Left too early] [Left too late] [Other]"
-- [ ] TTS confirmation: "Okay, snoozed [X] minutes"
-- [ ] Handle snooze persistence across app restart
-
-**Files:**
-- `src/lib/snooze_service.py` (new)
-- `src/lib/dismissal_service.py` (new)
+**Dependencies:** 1.3 LLM Adapter
 
 ---
 
-### 2.6 History & Stats Service
-**Priority:** P2 (depends on database)
+### 3.3 [ ] Location Awareness
+**Why fourth:** Optional escalation enhancement.
 
-**Current:**
-- Basic `calculate_hit_rate()` function
-- `/history` endpoint records outcomes
+**Tasks:**
+- [ ] Implement single location check at departure anchor (T-drive_duration)
+- [ ] Origin resolution: user-specified address or device location at creation
+- [ ] CoreLocation (iOS) / FusedLocationProvider (Android) single call at trigger
+- [ ] Geofence comparison: 500m radius
+- [ ] If within 500m of origin: fire firm/critical tier immediately instead of calm departure
+- [ ] If >500m: proceed with normal chain
+- [ ] Request location permission at first location-aware reminder (not app launch)
+- [ ] If denied: create reminder without location escalation, show note
+- [ ] Do NOT store location history
 
-**Required:**
-- [ ] Implement `HistoryService.calculate_hit_rate(days=7)`
-- [ ] Implement `HistoryService.get_common_miss_window(destination)`
-- [ ] Implement `HistoryService.get_streak(reminder_id)` for recurring reminders
-- [ ] Implement feedback loop adjustment:
-  - Query `destination_adjustments` for destination
-  - `adjusted_drive_duration = base + (miss_count * 2)`, capped at +15 min
-- [ ] Implement 90-day retention: archive older records
-- [ ] Add `missed_reason` field population on anchor drop
-
-**Files:**
-- `src/lib/history_service.py` (new)
+**Dependencies:** 3.1 Background Scheduling
 
 ---
 
-## Phase 3: Integrations
+### 3.4 [ ] Sound Library
+**Why fifth:** Nice-to-have enhancement.
 
-### 3.1 Calendar Integration
-**Priority:** P2 (depends on database)
+**Tasks:**
+- [ ] Bundle built-in sounds: Commute (5), Routine (5), Errand (5)
+- [ ] Support Custom category: import MP3, WAV, M4A (max 30 sec)
+- [ ] Transcode imported sounds to normalized format
+- [ ] Store custom sound references in `custom_sounds` table
+- [ ] Per-reminder sound selection (override category default)
+- [ ] Corrupted/missing file: fallback to category default, log error
+- [ ] Sound selection persists on reminder edit
 
-**Current:**
-- None
-
-**Required:**
-- [ ] Define `ICalendarAdapter` interface
-- [ ] Implement `AppleCalendarAdapter` using EventKit
-- [ ] Implement `GoogleCalendarAdapter` using Google Calendar API
-- [ ] Implement `MockCalendarAdapter` for testing
-- [ ] Implement `CalendarSyncService`:
-  - Sync on app launch
-  - Sync every 15 minutes (foreground)
-  - Sync via background refresh
-  - Filter events with non-empty location
-  - Generate suggestion cards for new events
-- [ ] Implement recurring event handling (daily/weekday occurrences)
-- [ ] Handle permission denial with explanation banner
-- [ ] Handle sync failure gracefully (app continues working)
-
-**Files:**
-- `src/lib/adapters/calendar_adapter.py` (new - interface + implementations)
-- `src/lib/calendar_sync.py` (new)
+**Dependencies:** 1.1 Data Persistence
 
 ---
 
-### 3.2 Location Awareness
-**Priority:** P2 (depends on scheduler)
+## Priority 4: Testing & Quality
 
-**Current:**
-- None
+### 4.1 [ ] Unit Test Suite
+**Why concurrent:** Ensure correctness as we build.
 
-**Required:**
-- [ ] Implement `ILocationAdapter` interface
-- [ ] Implement `iOSLocationAdapter` using CoreLocation
-- [ ] Implement `AndroidLocationAdapter` using FusedLocationProvider
-- [ ] Implement `MockLocationAdapter` for testing
-- [ ] Implement `LocationService.check_at_origin()`:
-  - Get current location at departure anchor
-  - Compare against origin (500m geofence radius)
-  - If within 500m: fire firm/critical tier immediately instead of calm departure
-  - If outside: proceed with normal chain
-- [ ] Request location permission at first location-aware reminder creation
-- [ ] Handle denied permission gracefully (create reminder without location escalation)
-- [ ] Ensure single location check only (no continuous tracking)
+**Tasks:**
+- [ ] Test escalation chain (TC-01 through TC-06 from spec)
+- [ ] Test parser with mock adapter (TC-01 through TC-07)
+- [ ] Test TTS adapter mock
+- [ ] Test voice personality message generation
+- [ ] Test hit rate calculation (TC-01 through TC-07)
+- [ ] Test snooze chain re-computation
+- [ ] Test database migrations and cascade delete
+- [ ] All tests use in-memory SQLite
 
-**Files:**
-- `src/lib/adapters/location_adapter.py` (new - interface + implementations)
-- `src/lib/location_service.py` (new)
+**Dependencies:** 1.1, 1.2, 1.3, 2.1, 2.2, 2.6
 
 ---
 
-### 3.3 Sound Library
-**Priority:** P3
+### 4.2 [ ] Integration Tests
+**Why last:** Validate end-to-end flows.
 
-**Current:**
-- None
+**Tasks:**
+- [ ] Test reminder creation → chain → TTS generation flow
+- [ ] Test anchor firing with mock TTS
+- [ ] Test background scheduling with mock Notifee
+- [ ] Test snooze → re-computation → re-registration flow
+- [ ] Test calendar sync → suggestion → reminder creation
+- [ ] Test location check → immediate escalation flow
 
-**Required:**
-- [ ] Bundle 5 built-in sounds per category (commute, routine, errand)
-- [ ] Implement `SoundLibrary` service:
-  - Play built-in sound by category
-  - List available sounds
-  - Set per-reminder sound selection
-- [ ] Implement custom audio import:
-  - Support MP3, WAV, M4A (max 30 seconds)
-  - Store in app sandbox
-  - Reference in `custom_sounds` table
-- [ ] Implement corrupted file fallback (use category default, log error)
-- [ ] Implement sound picker UI component
-
-**Files:**
-- `src/lib/sound_library.py` (new)
-- `assets/sounds/` (new - bundled sounds)
+**Dependencies:** 3.1, 3.2, 3.3, 4.1
 
 ---
 
-## Phase 4: Testing & Polish
-
-### 4.1 Test Suite
-**Priority:** P1 (ongoing, not final phase)
-
-**Required:**
-- [ ] Unit tests for chain engine (TC-01 through TC-06 from spec)
-- [ ] Unit tests for parser (TC-01 through TC-07 from spec)
-- [ ] Unit tests for TTS generation (TC-01 through TC-05 from spec)
-- [ ] Unit tests for notification tiers
-- [ ] Unit tests for background scheduler
-- [ ] Unit tests for snooze chain re-computation
-- [ ] Unit tests for hit rate calculation
-- [ ] Integration tests using mock adapters
-- [ ] End-to-end tests with in-memory SQLite
-
-**Files:**
-- `tests/test_chain_engine.py` (new)
-- `tests/test_parser.py` (new)
-- `tests/test_tts.py` (new)
-- `tests/test_notifications.py` (new)
-- `tests/test_scheduler.py` (new)
-- `tests/test_snooze.py` (new)
-- `tests/test_stats.py` (new)
-
----
-
-### 4.2 API Cleanup
-**Priority:** P2
-
-**Required:**
-- [ ] Refactor `test_server.py` into proper REST API with:
-  - `/api/v1/reminders/` - CRUD operations
-  - `/api/v1/reminders/{id}/anchors/` - list anchors
-  - `/api/v1/parse/` - natural language parsing
-  - `/api/v1/voice/message/` - message generation
-  - `/api/v1/history/` - history operations
-  - `/api/v1/stats/` - statistics endpoints
-  - `/api/v1/calendar/events/` - calendar suggestions
-  - `/api/v1/sounds/` - sound library
-- [ ] Add request validation
-- [ ] Add error responses matching spec
-
----
-
-### 4.3 Configuration & Environment
-**Priority:** P2
-
-**Required:**
-- [ ] `config.py` with environment variables:
-  - `MINIMAX_API_KEY`
-  - `ANTHROPIC_API_KEY`
-  - `ELEVENLABS_API_KEY`
-  - `GOOGLE_CALENDAR_CREDENTIALS`
-  - `DATABASE_PATH`
-  - `TTS_CACHE_DIR`
-- [ ] `src/lib/config.py` to manage settings
-- [ ] `.env.example` file
-
----
-
-## Implementation Order
+## Implementation Order Summary
 
 ```
 Phase 1: Foundation
-├── 1.1 Database Schema & Migrations (P0)
-└── 1.2 Chain Engine Enhancement (P0)
-    └── 1.3 LLM Adapter Interface (P1)
+  1.1 Data Persistence Layer
+  1.2 Escalation Chain Engine
+  1.3 LLM Adapter & Parser
 
 Phase 2: Core Features
-├── 2.1 TTS Adapter & Voice Generation (P1)
-├── 2.2 Reminder Service (P1)
-├── 2.3 Notification Service (P1)
-├── 2.4 Background Scheduling (P1)
-├── 2.5 Snooze & Dismissal Flow (P2)
-└── 2.6 History & Stats Service (P2)
+  2.1 Voice Personality System (parallel with TTS)
+  2.2 Voice & TTS Generation
+  2.3 Reminder Quick Add Flow
+  2.4 Notification & Alarm Behavior
+  2.5 Snooze & Dismissal Flow
+  2.6 History, Stats & Feedback Loop
 
-Phase 3: Integrations
-├── 3.1 Calendar Integration (P2)
-├── 3.2 Location Awareness (P2)
-└── 3.3 Sound Library (P3)
+Phase 3: Platform Integration
+  3.1 Background Scheduling (Notifee)
+  3.2 Calendar Integration
+  3.3 Location Awareness
+  3.4 Sound Library
 
-Phase 4: Testing & Polish
-├── 4.1 Test Suite (P1, ongoing)
-├── 4.2 API Cleanup (P2)
-└── 4.3 Configuration (P2)
+Phase 4: Testing
+  4.1 Unit Test Suite
+  4.2 Integration Tests
 ```
 
----
+## Out of Scope (Per Spec)
 
-## Dependency Graph
-
-```
-1.1 Database ──┬──> 1.2 Chain Engine ──> 2.6 History
-               │
-               ├──> 2.2 Reminder Service
-               │
-               └──> 3.1 Calendar Integration
-
-1.3 LLM Adapter ──> 2.2 Reminder Service ──> 2.1 TTS Adapter
-
-2.4 Background Scheduler ──> 2.5 Snooze & Dismissal
-     │
-     └──> 3.2 Location Awareness
-
-2.3 Notification Service ──> 2.5 Snooze & Dismissal
-     │
-     └──> 3.3 Sound Library
-```
-
----
-
-## Not in Scope (v1)
-
-- Authentication / account management
+- Password reset / auth (v1: local-only)
 - Smart home integration
 - Voice reply / spoken snooze
 - Multi-device sync
 - Bluetooth audio routing
-- Password reset
+- Continuous location tracking
+- Voice recording import
+- Sound trimming/editing
 - Cloud sound library
-- Automatic calendar adjustment from feedback
+- Database encryption
+- Full-text search
 
 ---
 
-## Definition of Done Checklist
+## Verification Commands
 
-- [ ] All acceptance criteria from Sections 2-13 have passing tests
-- [ ] Each test scenario (Given/When/Then) maps to at least one test
-- [ ] TTS clips cached at reminder creation (zero runtime latency)
-- [ ] Background scheduling works with app closed
-- [ ] DND and quiet hours respected
-- [ ] Chain overlap serialized
-- [ ] Snooze re-computes and re-registers anchors
-- [ ] Feedback loop adjusts destination drive estimates
-- [ ] Calendar events with locations surface suggestions
-- [ ] Location check at departure (single call, 500m geofence)
+```bash
+# Validate test server
+python3 -m py_compile src/test_server.py
+
+# Run unit tests (when implemented)
+python3 -m pytest harness/
+
+# Manual harness test
+sudo python3 harness/scenario_harness.py --project otto-matic
+```
