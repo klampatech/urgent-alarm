@@ -511,6 +511,8 @@ Priority 4: User Interaction
 
 ## Current Gaps Detail
 
+> **Note:** Current scenario coverage is 15 scenarios across 5 spec sections. Missing scenarios for Sections 4 (TTS), 5 (Notifications), 6 (Background), 7 (Calendar), 8 (Location), 9 (Snooze), and 12 (Sound Library) are not yet defined.
+
 | Component | Status | Test Scenarios | Notes |
 |-----------|--------|----------------|-------|
 | P0.1 Scenario Harness | NOT STARTED | 0/15 | BLOCKING — cannot validate anything |
