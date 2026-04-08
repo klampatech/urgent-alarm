@@ -66,10 +66,15 @@ This is the ONLY thing blocking Otto. All other tasks are backend improvements t
 
 ### Section 2: Escalation Chain Engine
 
-**Current:** `compute_escalation_chain()` in `test_server.py` handles basic cases
+**Current:** `compute_escalation_chain()` in `test_server.py` - PARTIALLY BROKEN
+
+**Bug Found:** TC-02 (15 min buffer) chain is incorrect:
+- Current: urgent(T-10), pushing(T-5), firm(T-0) ❌, critical(T-1), alarm(T-0)
+- Expected: urgent(T-10), pushing(T-5), firm(T-2), critical(T-1), alarm(T-0)
+- The `firm` anchor is calculated as `drive_duration - 15 = 0` instead of `buffer_minutes - 3 = 2`
 
 **Missing:**
-- [ ] 20-24 min buffer compression (currently only 10-24 min and 5-9 min covered)
+- [x] **BUG FIX:** Fix 15-24 min buffer compression (firm tier calculation)
 - [ ] `get_next_unfired_anchor(reminder_id)` function for recovery
 - [ ] Chain determinism (same inputs → same outputs) for unit testing
 - [ ] `fire_count` tracking in anchor records
@@ -357,7 +362,10 @@ def get_inmemory_instance():
 **File:** `src/test_server.py`
 
 **Changes:**
-1. Fix 20-24 min buffer compression
+1. **BUG FIX:** Fix compressed chain formula for 10-24 min buffers:
+   - Current: `firm = drive_duration - 15` → gives T-0 for 15min buffer (wrong)
+   - Fixed: `firm = buffer_minutes - 3` → gives T-2 for 15min buffer (correct)
+   - Correct tiers for 15min: urgent(T-10), pushing(T-5), firm(T-2), critical(T-1), alarm(T-0)
 2. Add `get_next_unfired_anchor(reminder_id)` function
 3. Add `fire_count` tracking
 4. Add determinism (use sorted tuple output)

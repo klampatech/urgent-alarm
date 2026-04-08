@@ -16,7 +16,7 @@ This directory contains validation scenarios for the Otto harness testing the Ur
 | `voice-coach-personality.yaml` | Coach voice generation | Section 10, TC-01 |
 | `voice-no-nonsense.yaml` | No-nonsense voice generation | Section 10, TC-02 |
 | `voice-all-personalities.yaml` | All 5 personalities | Section 10 |
-| `history-record-hit.yaml` | Record hit outcome | Section 11, TC-04 |
+| `history-record-outcome.yaml` | Record outcome | Section 11 |
 | `history-record-miss-feedback.yaml` | Record miss with feedback | Section 11, TC-05 |
 | `stats-hit-rate.yaml` | Hit rate calculation | Section 11, TC-01 |
 | `reminder-full-crud.yaml` | Full CRUD workflow | Section 13 |
