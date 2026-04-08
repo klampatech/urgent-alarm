@@ -1,10 +1,10 @@
 # Urgent Alarm - Implementation Plan
 
-**Generated:** 2026-04-08
+**Generated:** 2026-04-08 (Updated)
 **Spec Version:** urgent-voice-alarm-app-2026-04-08.spec.md
-**Spec Sections:** 14 (2-13 covering features, Section 1 overview, Section 14 definition of done)
+**Spec Sections:** 14 (Sections 2-13 covering features, Section 1 overview, Section 14 definition of done)
 **Test Scenarios:** 47 TC cases (6+ per section)
-**Scenario Files:** 16 YAML files in `scenarios/`
+**Scenario Files:** 15 YAML files in `scenarios/`
 
 ---
 
@@ -12,12 +12,12 @@
 
 | Component | Status | Gap |
 |-----------|--------|-----|
-| **Testing Harness** | ❌ **Missing** | `harness/` directory is empty — **scenario_harness.py must be created from scratch** |
-| **Chain Engine** | ⚠️ Buggy | Compression logic doesn't match spec for 10-24 min buffers |
+| **Testing Harness** | ❌ **MISSING** | `harness/scenario_harness.py` does not exist — must be created |
+| **Chain Engine** | ⚠️ Buggy | Compression logic produces duplicates (firm=0, alarm=0) and incorrect tier counts |
 | **Database Schema** | ⚠️ Incomplete | Missing 6 columns, 3 tables per spec Section 13 |
 | **LLM Parser** | ⚠️ Partial | Keyword extraction works; no LLM adapter interface |
 | **Voice System** | ⚠️ Partial | 1 template/tier vs spec's 3+ variations required |
-| **Stats System** | ⚠️ Buggy | Hit rate excludes pending incorrectly, no streak/miss window |
+| **Stats System** | ⚠️ Buggy | No streak, no miss window, hit rate calculation needs review |
 | **TTS System** | ❌ Not implemented | No ElevenLabs adapter, caching, or fallback |
 | **Notifications** | ❌ Not implemented | No DND, quiet hours, tier escalation, chain overlap |
 | **Background Scheduling** | ❌ Not implemented | No Notifee, BGTaskScheduler, recovery scan |
@@ -26,7 +26,7 @@
 | **Snooze Flow** | ❌ Not implemented | No tap/hold snooze, chain re-computation |
 | **Sound Library** | ❌ Not implemented | No built-in sounds or custom import |
 
-**Current Implementation:** ~30% (core engine present but incomplete — harness missing entirely)
+**Current Implementation:** ~25% (basic engine present, harness missing entirely)
 
 ---
 
@@ -34,46 +34,45 @@
 
 These items block all other work:
 
-### 1. Create Testing Harness ⚠️ **CRITICAL — HARNESS DIRECTORY IS EMPTY**
+### 1. Create Testing Harness ⚠️ **CRITICAL — HARNESS DOES NOT EXIST**
 
-**Location:** `harness/scenario_harness.py` (**MUST BE CREATED FROM SCRATCH** — directory exists but file is missing)
+**Location:** `harness/scenario_harness.py` (file does not exist — must be created from scratch)
 
-**Impact:** Cannot validate any of the 16 scenario files
+**Impact:** Cannot validate any of the 15 scenario files via `python3 -m pytest harness/` or `sudo python3 harness/scenario_harness.py --project urgent-alarm`
 
-**Important:** Per AGENTS.md validation rules, the harness is what enables `python3 -m pytest harness/` and scenario execution via `sudo python3 harness/scenario_harness.py --project otto-matic`
-
-**Required Features:****
+**Required Features:**
 - YAML scenario parser
 - HTTP assertion checker (status, body)
 - DB assertion checker (record existence, field values)
 - `llm_judge` assertion type support
 - `api_sequence` trigger type (sequential API calls)
 - `base_url` env var support
-- `OTTO_SCENARIO_DIR` support
+- `OTTO_SCENARIO_DIR` support (default: `/var/otto-scenarios/{project}`)
+- Output to `/tmp/ralph-scenario-result.json`
 
 **Scenario Files to Support:**
 ```
-scenarios/chain-full-30min.yaml         # TC-01: 8 anchors for ≥25 min
-scenarios/chain-compressed-15min.yaml   # TC-02: compressed for 10-24 min
-scenarios/chain-minimum-3min.yaml       # TC-03: minimum for ≤5 min
-scenarios/chain-invalid-rejected.yaml   # TC-04: 400 error on invalid
-scenarios/parse-natural-language.yaml    # TC-01: full parse
-scenarios/parse-simple-countdown.yaml   # TC-02: simple countdown
-scenarios/parse-tomorrow.yaml           # TC-03: tomorrow date resolution
-scenarios/voice-coach-personality.yaml  # TC-01: coach messages
-scenarios/voice-no-nonsense.yaml       # TC-02: no-nonsense messages
-scenarios/voice-all-personalities.yaml   # All 5 personalities
-scenarios/history-record-outcome.yaml   # Record hit/miss
+scenarios/chain-full-30min.yaml        # TC-01: 8 anchors for ≥25 min
+scenarios/chain-compressed-15min.yaml  # TC-02: compressed for 15 min buffer
+scenarios/chain-invalid-rejected.yaml # TC-04: 400 error on invalid
+scenarios/chain-minimum-3min.yaml      # TC-03: minimum for ≤5 min
+scenarios/parse-natural-language.yaml  # TC-01: full parse
+scenarios/parse-simple-countdown.yaml # TC-02: simple countdown
+scenarios/parse-tomorrow.yaml         # TC-03: tomorrow date resolution
+scenarios/voice-coach-personality.yaml # TC-01: coach messages
+scenarios/voice-no-nonsense.yaml      # TC-02: no-nonsense messages
+scenarios/voice-all-personalities.yaml # All 5 personalities
+scenarios/history-record-outcome.yaml # Record hit/miss
 scenarios/history-record-miss-feedback.yaml # TC-05: feedback loop
-scenarios/stats-hit-rate.yaml           # TC-01: 80% hit rate
-scenarios/reminder-creation-crud.yaml   # Full CRUD workflow
+scenarios/stats-hit-rate.yaml         # TC-01: 80% hit rate
+scenarios/reminder-creation-crud.yaml # Full CRUD workflow
 scenarios/reminder-creation-cascade-delete.yaml # TC-03: cascade delete
 ```
 
 **Acceptance Criteria:**
 - [ ] `python3 -m py_compile harness/scenario_harness.py` passes
 - [ ] `python3 harness/scenario_harness.py --project urgent-alarm` runs without error
-- [ ] All 16 scenario files execute successfully
+- [ ] All 15 scenario files execute successfully
 - [ ] `/tmp/ralph-scenario-result.json` is written after execution
 
 **Dependencies:** None (pure Python, stdlib)
@@ -81,40 +80,56 @@ scenarios/reminder-creation-cascade-delete.yaml # TC-03: cascade delete
 ---
 
 ### 2. Fix Chain Engine Compression Logic ⚠️ HIGH PRIORITY
+
 **Location:** `src/test_server.py` - `compute_escalation_chain()` function
-**Spec:** Section 2.3, TC-01 through TC-06
+
+**Current Bugs Identified:**
+
+```
+TC-02 (15 min buffer) - WRONG:
+  urgent: 10 min before  ✓
+  pushing: 5 min before  ✓
+  firm: 0 min before     ✗ (should be 15 min before)
+  critical: 1 min before ✗ (duplicate tier, wrong timing)
+  alarm: 0 min before    ✗ (duplicate time)
+
+TC-03 (3 min buffer) - WRONG:
+  firm: 2 min before  ✓
+  alarm: 0 min before ✗ (should have 3 anchors: firm, critical, alarm)
+```
 
 **Spec Requirements vs Current:**
 
-| Buffer | Spec Requirement | Current | Fix Needed |
-|--------|------------------|---------|------------|
+| Buffer | Spec Requirement | Current | Bug |
+|--------|------------------|---------|-----|
 | ≥25 min | 8 anchors: calm→casual→pointed→urgent→pushing→firm→critical→alarm | 8 ✅ | None |
-| 15-24 min | 5 anchors: urgent→pushing→firm→critical→alarm (skip calm/casual/pointed) | Wrong logic | Fix |
-| 10-14 min | 5 anchors: urgent→pushing→firm→critical→alarm | Wrong logic | Fix |
-| 5-9 min | 3 anchors: firm→critical→alarm | Wrong logic | Fix |
-| 1-4 min | 2-3 anchors: firm+alarm (or alarm only) | Wrong logic | Fix |
+| 15-24 min | 5 anchors: urgent→pushing→firm→critical→alarm | 5 ❌ | Duplicates at T-0, wrong tiers |
+| 10-14 min | 5 anchors (similar compression) | 5 ❌ | Same duplicates |
+| 5-9 min | 3 anchors: firm→critical→alarm | 3 ❌ | Missing critical tier |
+| 1-4 min | 2-3 anchors: firm+critical+alarm | 2 ❌ | Missing critical tier |
 
-**Spec TC-02 Clarification:**
-> "Given a reminder with arrival_time = 9:00 AM and drive_duration = 15 minutes"
-> "Then 5 anchors are created skipping calm and casual tiers, starting at T-10 (urgent)"
+**Fix Needed for TC-02 (15 min buffer):**
+Based on spec: anchors should be at T-10 (urgent), T-5 (pushing), T-15 (firm), T-1 (critical), T-0 (alarm)
 
-For 15 min buffer: T-10 (urgent), T-5 (pushing), T-4 (firm), T-1 (critical), T-0 (alarm)
+Current code has wrong logic - `firm` and `alarm` both end up at 0 minutes before.
+
+**Fix Needed for TC-03 (3 min buffer):**
+Should be: T-2 (firm), T-1 (critical), T-0 (alarm) = 3 anchors
 
 **Tasks:**
 | Task | Description |
 |------|-------------|
-| Fix 15-24 min range | 5 anchors starting at urgent tier |
-| Fix 10-14 min range | 5 anchors, adjust T thresholds |
+| Fix 15-24 min range | 5 anchors with correct tiers: urgent, pushing, firm, critical, alarm |
+| Fix 10-14 min range | 5 anchors with adjusted T thresholds |
 | Fix 5-9 min range | 3 anchors: firm, critical, alarm |
-| Fix 1-4 min range | 2-3 anchors per TC-03 |
+| Fix 1-4 min range | 3 anchors per TC-03 |
 | Implement `get_next_unfired_anchor()` | Required for TC-05 |
 | Add unit tests | Verify each buffer range |
-| Validate determinism | TC-06: identical inputs → identical outputs |
 
 **Acceptance Criteria:**
 - [ ] TC-01: 30 min buffer → 8 anchors at 8:30, 8:35, 8:40, 8:45, 8:50, 8:55, 8:59, 9:00
-- [ ] TC-02: 15 min buffer → 5 anchors at T-10, T-5, T-4, T-1, T-0
-- [ ] TC-03: 3 min buffer → 3 anchors at T-3 (firm), T-1 (critical), T-0 (alarm)
+- [ ] TC-02: 15 min buffer → 5 anchors at T-10, T-5, T-15, T-1, T-0 (urgent, pushing, firm, critical, alarm)
+- [ ] TC-03: 3 min buffer → 3 anchors at T-2 (firm), T-1 (critical), T-0 (alarm)
 - [ ] TC-04: 120 min buffer → 400 error "drive_duration exceeds time_to_arrival"
 - [ ] TC-05: `get_next_unfired_anchor(reminder_id)` returns earliest unfired anchor
 - [ ] TC-06: Identical inputs produce identical anchor lists
@@ -122,40 +137,29 @@ For 15 min buffer: T-10 (urgent), T-5 (pushing), T-4 (firm), T-1 (critical), T-0
 ---
 
 ### 3. Complete Database Schema ⚠️ HIGH PRIORITY
+
 **Location:** `src/test_server.py` - `init_db()` function
-**Spec:** Section 13, Table Schema
 
-**Current `reminders` table columns:**
-- ✅ id, destination, arrival_time, drive_duration, reminder_type, voice_personality, status, created_at, updated_at
+**Spec:** Section 13 - Full schema with 8 tables
 
-**Missing `reminders` columns:**
-| Column | Type | Purpose |
-|--------|------|---------|
-| `sound_category` | TEXT | Sound library: commute/routine/errand/custom |
-| `selected_sound` | TEXT | Per-reminder sound override |
-| `custom_sound_path` | TEXT | Imported custom audio file path |
-| `origin_lat` | REAL | Location awareness - origin latitude |
-| `origin_lng` | REAL | Location awareness - origin longitude |
-| `origin_address` | TEXT | Location awareness - origin address |
-| `calendar_event_id` | TEXT | Calendar integration reference |
+**Current State (Partial):**
 
-**Current `anchors` table columns:**
-- ✅ id, reminder_id, timestamp, urgency_tier, tts_clip_path, fired, fire_count
+`reminders` table - Missing columns:
+- `sound_category` (TEXT) - Sound library: commute/routine/errand/custom
+- `selected_sound` (TEXT) - Per-reminder sound override
+- `custom_sound_path` (TEXT) - Imported custom audio file path
+- `origin_lat` (REAL) - Location awareness - origin latitude
+- `origin_lng` (REAL) - Location awareness - origin longitude
+- `origin_address` (TEXT) - Location awareness - origin address
+- `calendar_event_id` (TEXT) - Calendar integration reference
 
-**Missing `anchors` columns:**
-| Column | Type | Purpose |
-|--------|------|---------|
-| `tts_fallback` | BOOLEAN | TTS failure → use system sound |
-| `snoozed_to` | TEXT | Snooze redirect to new timestamp |
+`anchors` table - Missing columns:
+- `tts_fallback` (BOOLEAN) - TTS failure → use system sound
+- `snoozed_to` (TEXT) - Snooze redirect to new timestamp
 
-**Current `history` table columns:**
-- ✅ id, reminder_id, destination, scheduled_arrival, outcome, feedback_type, created_at
-
-**Missing `history` columns:**
-| Column | Type | Purpose |
-|--------|------|---------|
-| `actual_arrival` | TEXT | Resolved after firing |
-| `missed_reason` | TEXT | Log: background_task_killed, dnd_suppressed, user_dismissed |
+`history` table - Missing columns:
+- `actual_arrival` (TEXT) - Resolved after firing
+- `missed_reason` (TEXT) - Log: background_task_killed, dnd_suppressed, user_dismissed
 
 **Missing tables:**
 | Table | Purpose |
@@ -189,7 +193,9 @@ For 15 min buffer: T-10 (urgent), T-5 (pushing), T-4 (firm), T-1 (critical), T-0
 ## Core Engine Completion
 
 ### 4. Complete Voice Personality System
+
 **Location:** `src/test_server.py` - `VOICE_PERSONALITIES` dict
+
 **Spec:** Section 10
 
 **Current State:**
@@ -225,7 +231,9 @@ custom:       User-defined (max 200 chars)
 ---
 
 ### 5. Add LLM Adapter Interface
+
 **Location:** `src/parser/llm_adapter.py` (new file)
+
 **Spec:** Section 3
 
 **Tasks:**
@@ -263,12 +271,10 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 6. Complete Stats System
-**Location:** `src/stats/` (new module)
-**Spec:** Section 11
 
-**Current Issues in `calculate_hit_rate()`:**
-- Doesn't exclude `pending` outcomes from denominator correctly
-- Uses `count(outcome != 'pending')` but should calculate differently
+**Location:** `src/stats/` (new module)
+
+**Spec:** Section 11
 
 **Missing Stats:**
 | Stat | Description |
@@ -281,7 +287,6 @@ class AnthropicAdapter(ILanguageModelAdapter):
 **Tasks:**
 | Task | Description |
 |------|-------------|
-| Fix hit rate calculation | Exclude pending from both numerator and denominator |
 | Add `get_streak(reminder_id)` | Count consecutive hits for recurring reminders |
 | Add `get_common_miss_window(destination)` | Return most-missed tier |
 | Enforce adjustment cap | Cap at +15 minutes |
@@ -301,7 +306,9 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ## Feature Implementation
 
 ### 7. TTS System (Voice Generation)
+
 **Location:** `src/tts/` (new module)
+
 **Spec:** Section 4
 
 **Tasks:**
@@ -324,7 +331,9 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 8. Snooze & Dismissal Flow
+
 **Location:** `src/snooze/` (new module)
+
 **Spec:** Section 9
 
 **Tasks:**
@@ -350,7 +359,9 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 9. Notification & Alarm Behavior
+
 **Location:** `src/notifications/` (new module)
+
 **Spec:** Section 5
 
 **Tasks:**
@@ -376,7 +387,9 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 10. Background Scheduling
+
 **Location:** `src/scheduler/` (new module)
+
 **Spec:** Section 6
 
 **Tasks:**
@@ -403,7 +416,9 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ## Integration Implementation
 
 ### 11. Calendar Integration
+
 **Location:** `src/calendar/` (new module)
+
 **Spec:** Section 7
 
 **Tasks:**
@@ -429,7 +444,9 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 12. Location Awareness
+
 **Location:** `src/location/` (new module)
+
 **Spec:** Section 8
 
 **Tasks:**
@@ -451,7 +468,9 @@ class AnthropicAdapter(ILanguageModelAdapter):
 ---
 
 ### 13. Sound Library
+
 **Location:** `src/sounds/` (new module)
+
 **Spec:** Section 12
 
 **Tasks:**
@@ -472,7 +491,7 @@ class AnthropicAdapter(ILanguageModelAdapter):
 
 ---
 
-## Files to Create
+## Files to Create/Modify
 
 ### New Module Structure
 ```
@@ -505,7 +524,8 @@ src/
 ### Modify
 | File | Changes |
 |------|---------|
-| `src/test_server.py` | Fix chain logic, complete schema, add missing endpoints |
+| `src/test_server.py` | Fix chain logic bugs, complete schema, add missing endpoints |
+| `harness/scenario_harness.py` | Create from scratch |
 
 ---
 
@@ -568,5 +588,4 @@ curl http://localhost:8090/health
 |----------|----------|
 | Full specification | `specs/urgent-voice-alarm-app-2026-04-08.spec.md` |
 | Product requirements | `specs/urgent-voice-alarm-app-2026-04-08.md` |
-| Scenario files | `scenarios/*.yaml` (16 files) |
-| Otto guide | `OTTO_GUIDE.md` |
+| Scenario files | `scenarios/*.yaml` (15 files) |
