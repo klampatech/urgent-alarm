@@ -1,395 +1,344 @@
-# Urgent Voice Alarm - Implementation Plan
+# URGENT Alarm - Implementation Plan
 
 ## Analysis Summary
 
-**Spec Document:** `specs/urgent-voice-alarm-app-2026-04-08.spec.md` (1024 lines, 14 sections)
+### Specification Files Analyzed
+- `specs/urgent-voice-alarm-app-2026-04-08.md` - Product overview
+- `specs/urgent-voice-alarm-app-2026-04-08.spec.md` - Full technical specification (14 sections)
 
-**Current State:** Single Python file (`src/test_server.py`) with:
-- Basic SQLite schema (partial - missing 15+ columns per spec)
-- `compute_escalation_chain()` - partial implementation
-- `parse_reminder_natural()` - keyword-only parser (no LLM)
-- `generate_voice_message()` - 5 voice personalities, 8 tiers each
-- `calculate_hit_rate()` - basic stats
-- Basic REST API endpoints (8 endpoints)
+### Current State: `src/test_server.py`
+The current implementation is a **minimal proof-of-concept** that covers only the core validation needs:
 
-**Coverage:** ~12% of spec requirements implemented.
+**✅ Implemented:**
+- Escalation Chain Engine (`compute_escalation_chain`, `validate_chain`)
+- Reminder Parsing via keyword fallback (`parse_reminder_natural`)
+- Voice Personality Message Templates (`VOICE_PERSONALITIES`, `generate_voice_message`)
+- History & Stats (`calculate_hit_rate`, feedback loop with destination adjustments)
+- Basic SQLite schema (partial - missing fields per spec)
 
-**What's Missing:**
-- All adapter interfaces (LLM, TTS, Calendar)
-- Full database schema (missing tables and columns)
-- Notification/alarm system
-- Background scheduling (Notifee)
-- Location awareness
-- Snooze/dismissal with chain re-computation
-- Sound library
-- Test suite (69 scenarios required)
-- Migration system
+**❌ Missing/Incomplete:**
+
+| Section | Status | Gap |
+|---------|--------|-----|
+| 2. Escalation Chain Engine | Partial | Missing `get_next_unfired_anchor()`, incomplete validation |
+| 3. Reminder Parsing & Creation | Partial | No LLM adapter, no mock interface, no confirmation flow |
+| 4. Voice & TTS Generation | Missing | No ElevenLabs adapter, no TTS cache management |
+| 5. Notification & Alarm Behavior | Missing | No notification tier escalation, DND/quiet hours, chain serialization |
+| 6. Background Scheduling | Missing | No Notifee/BGTaskScheduler integration |
+| 7. Calendar Integration | Missing | No EventKit/Google Calendar adapters |
+| 8. Location Awareness | Missing | No CoreLocation/FusedLocationProvider integration |
+| 9. Snooze & Dismissal Flow | Missing | No snooze/recompute logic |
+| 10. Voice Personality System | Partial | Templates exist but no per-tier variations (min 3 required) |
+| 11. History, Stats & Feedback Loop | Partial | Missing "common miss window", streak tracking incomplete |
+| 12. Sound Library | Missing | No sound categories, no custom import |
+| 13. Data Persistence | Partial | Schema incomplete per spec |
 
 ---
 
-## Priority 1: Foundation (Must Complete First)
+## Implementation Tasks (Prioritized)
 
-These tasks are dependencies for everything else.
+### Phase 1: Core Infrastructure (Foundational)
 
-### P1-T1: Database Schema & Migrations
-**Spec:** Section 13 (Data Persistence)
-**Status:** Partial - only 5 tables exist, missing 12+ columns and migration system
-
-**Tasks:**
-- [ ] Create `src/lib/database.py` with migration system
-- [ ] Add `schema_migrations` table for version tracking
-- [ ] Add missing `reminders` columns:
-  - `origin_lat REAL`
-  - `origin_lng REAL`
-  - `origin_address TEXT`
-  - `custom_sound_path TEXT`
-  - `calendar_event_id TEXT`
-- [ ] Add missing `anchors` columns:
-  - `snoozed_to TEXT`
-  - `tts_fallback BOOLEAN DEFAULT FALSE`
-- [ ] Add missing `history` columns:
-  - `actual_arrival TEXT`
-  - `missed_reason TEXT`
-- [ ] Add `calendar_sync` table (calendar_type, last_sync_at, sync_token, is_connected)
-- [ ] Add `custom_sounds` table (id, filename, original_name, category, file_path, duration_seconds, created_at)
-- [ ] Add `updated_at` to tables where missing
-- [ ] Enable WAL mode and foreign key enforcement
-- [ ] Create in-memory test database helper
-- [ ] Write migration tests (TC-01 through TC-05)
-
-### P1-T2: Test Infrastructure
-**Spec:** Section 14 (Definition of Done)
-**Status:** No tests exist
+#### 1.1 Complete Data Persistence Layer
+**Priority:** P0 (blocks all other work)
+**Files:** `src/lib/database.py`, `src/lib/migrations.py`
 
 **Tasks:**
-- [ ] Create `tests/` directory structure
-- [ ] Create `tests/conftest.py` with fixtures:
-  - In-memory database fixture with fresh schema
-  - Mock adapters for LLM, TTS, Calendar
-  - Sample reminder data fixture
-- [ ] Create `tests/test_chain_engine.py` (6 scenarios)
-- [ ] Create `tests/test_parser.py` (7 scenarios)
-- [ ] Create `tests/test_voice_personalities.py` (5 scenarios)
-- [ ] Create `tests/test_stats.py` (7 scenarios)
-- [ ] Create `tests/test_database.py` (5 scenarios)
-- [ ] Run: `python3 -m pytest tests/ -v`
+- [ ] Implement full schema from spec Section 13 with all tables/columns:
+  - `reminders`: origin_lat, origin_lng, origin_address, custom_sound_path, calendar_event_id
+  - `anchors`: tts_fallback, snoozed_to
+  - `history`: missed_reason, actual_arrival
+  - `calendar_sync`, `custom_sounds` tables
+- [ ] Implement sequential migration system (schema_v1, v2, etc.)
+- [ ] Enable foreign key enforcement, WAL mode
+- [ ] Add `getInMemoryInstance()` for tests
+- [ ] UUID v4 generation for all IDs
 
-### P1-T3: Chain Engine Completion
-**Spec:** Section 2 (Escalation Chain Engine)
-**Status:** Partial - compression logic needs review
+**Acceptance:** Fresh DB starts at schema version N, in-memory test DB works, cascade deletes work.
+
+#### 1.2 Complete Escalation Chain Engine
+**Priority:** P0 (blocks reminder creation)
+**Files:** `src/lib/chain_engine.py`
 
 **Tasks:**
-- [ ] Review and fix chain compression per spec:
-  - ≥25 min: 8 anchors (calm, casual, pointed, urgent, pushing, firm, critical, alarm)
-  - 20-24 min: 7 anchors (skip calm)
-  - 10-19 min: 5 anchors (urgent, pushing, firm, critical, alarm)
-  - 5-9 min: 3 anchors (firm, critical, alarm)
-  - <5 min: 2-3 anchors (minimum)
 - [ ] Implement `get_next_unfired_anchor(reminder_id)` function
-- [ ] Add deterministic seeding for unit test reproducibility
-- [ ] Add validation: reject if drive_duration > arrival - now
-- [ ] Write unit tests (TC-01 through TC-06)
+- [ ] Ensure chain determinism (same inputs = same output)
+- [ ] Complete validation: arrival > departure + minimum_drive_time
+- [ ] Add compressed chain logic for 20-24 min buffer (currently only 10-24)
+
+**Acceptance:** TC-01 through TC-06 from spec pass.
 
 ---
 
-## Priority 2: Adapter Interfaces & Parsing
+### Phase 2: Reminder Creation & Parsing
 
-### P2-T1: LLM Adapter Interface
-**Spec:** Section 3 (Reminder Parsing & Creation)
-**Status:** Only keyword extraction exists
-
-**Tasks:**
-- [ ] Create `src/lib/adapters/__init__.py`
-- [ ] Create `src/lib/adapters/llm_adapter.py`:
-  - Define `ILanguageModelAdapter` abstract base class
-  - Implement `MiniMaxAdapter` (Anthropic-compatible)
-  - Implement `AnthropicAdapter`
-  - Implement `MockLLMAdapter` for testing
-- [ ] Configure API selection via environment variable (`LLM_PROVIDER=minimax|anthropic`)
-- [ ] Define system prompt for extraction schema
-- [ ] Add confidence score to parse result
-- [ ] Write adapter tests (TC-07)
-
-### P2-T2: Parser Enhancement
-**Spec:** Section 3
+#### 2.1 LLM Adapter Interface & Implementation
+**Priority:** P1 (differentiating feature)
+**Files:** `src/lib/adapters/llm_adapter.py`, `src/lib/adapters/llm_minimax.py`, `src/lib/adapters/llm_anthropic.py`, `src/lib/adapters/llm_mock.py`
 
 **Tasks:**
-- [ ] Add `reminder_type` enum support (countdown_event, simple_countdown, morning_routine, standing_recurring)
-- [ ] Support time formats: "X min drive", "X-minute drive", "in X minutes", "arrive at X", "check-in at X"
-- [ ] Handle "tomorrow" date resolution
-- [ ] Implement LLM fallback to keyword extraction on API failure
-- [ ] Return user-facing error for unintelligible input
-- [ ] Write parser tests (TC-01 through TC-07)
+- [ ] Define `ILanguageModelAdapter` interface
+- [ ] Implement `MiniMaxAdapter` (Anthropic-compatible endpoint)
+- [ ] Implement `AnthropicAdapter`
+- [ ] Implement `MockLLMAdapter` for tests
+- [ ] Implement keyword extraction fallback
+- [ ] Connect to confirmation flow
 
-### P2-T3: TTS Adapter Interface
-**Spec:** Section 4 (Voice & TTS Generation)
-**Status:** No TTS implementation
+**Acceptance:** Parser accepts MiniMax or Anthropic, fallback works on API failure, mock used in tests.
 
-**Tasks:**
-- [ ] Create `src/lib/adapters/tts_adapter.py`:
-  - Define `ITTSAdapter` abstract base class
-  - Implement `ElevenLabsAdapter`
-  - Implement `MockTTSAdapter` for testing
-- [ ] Configure API via environment variable (`ELEVENLABS_API_KEY`)
-- [ ] Create TTS cache directory: `/tts_cache/{reminder_id}/`
-- [ ] Implement clip generation at reminder creation
-- [ ] Implement fallback to system sounds on API failure
-- [ ] Add cache invalidation on reminder deletion
-- [ ] Write TTS tests (TC-01 through TC-05)
-
-### P2-T4: Voice Personality Enhancement
-**Spec:** Section 10 (Voice Personality System)
-**Status:** Templates exist, missing features
+#### 2.2 Reminder Creation Workflow
+**Priority:** P1
+**Files:** `src/lib/reminder_service.py`
 
 **Tasks:**
-- [ ] Add custom prompt support (max 200 characters)
-- [ ] Add message variations per tier (minimum 3 per tier per personality)
-- [ ] Map each personality to distinct ElevenLabs voice ID
-- [ ] Store selected personality in user_preferences
-- [ ] Ensure existing reminders retain personality at creation time
-- [ ] Write voice personality tests (TC-01 through TC-05)
+- [ ] `create_reminder()` flow: parse → validate → compute chain → persist
+- [ ] Confirmation card data structure
+- [ ] Manual field correction handling
+- [ ] Support all 4 reminder types
+
+**Acceptance:** TC-01 through TC-07 from spec pass.
 
 ---
 
-## Priority 3: Core Business Logic
+### Phase 3: Voice & TTS
 
-### P3-T1: Snooze & Dismissal Logic
-**Spec:** Section 9 (Snooze & Dismissal Flow)
-**Status:** Not implemented
-
-**Tasks:**
-- [ ] Implement chain re-computation after snooze
-- [ ] Implement tap snooze (1 minute)
-- [ ] Implement custom snooze picker (1, 3, 5, 10, 15 min)
-- [ ] Re-register snoozed anchors with new timestamps
-- [ ] Implement TTS snooze confirmation: "Okay, snoozed X minutes"
-- [ ] Persist snooze state for crash recovery
-- [ ] Write snooze tests (TC-01 through TC-06)
-
-### P3-T2: Feedback Loop
-**Spec:** Section 11 (History, Stats & Feedback Loop)
-**Status:** Partial - hit rate exists
+#### 3.1 TTS Adapter Interface & Implementation
+**Priority:** P1 (critical UX feature)
+**Files:** `src/lib/adapters/tts_adapter.py`, `src/lib/adapters/tts_elevenlabs.py`, `src/lib/adapters/tts_mock.py`
 
 **Tasks:**
-- [ ] Implement dismissal feedback (timing_right, left_too_early, left_too_late, other)
-- [ ] Store feedback in history table
-- [ ] Adjust drive_duration: +2 minutes per "left_too_late", cap at +15
-- [ ] Implement common_miss_window calculation
-- [ ] Implement streak counter (increment on hit, reset on miss)
-- [ ] Implement 90-day data retention policy
-- [ ] Write feedback tests (TC-01 through TC-07)
+- [ ] Define `ITTSAdapter` interface
+- [ ] Implement `ElevenLabsAdapter` with voice ID mapping
+- [ ] Implement `MockTTSAdapter` for tests
+- [ ] TTS cache management (`/tts_cache/{reminder_id}/`)
+- [ ] TTS cache invalidation on reminder delete
+- [ ] Fallback to system notification on TTS failure
 
-### P3-T3: Stats Calculations
-**Spec:** Section 11
+**Acceptance:** TC-01 through TC-05 from spec pass.
+
+#### 3.2 Voice Personality System Enhancement
+**Priority:** P2
+**Files:** `src/lib/voice_personalities.py`
 
 **Tasks:**
-- [ ] Verify weekly hit rate calculation
-- [ ] Implement common miss window display
-- [ ] Ensure all stats computable from history table alone
-- [ ] Create stats API endpoints
+- [ ] Add minimum 3 message variations per tier per personality
+- [ ] Custom prompt support (max 200 chars)
+- [ ] Per-reminder personality persistence
+
+**Acceptance:** TC-01 through TC-05 from spec pass (message variation requirement).
 
 ---
 
-## Priority 4: Notification & Sound System
+### Phase 4: Notifications & Alarms
 
-### P4-T1: Notification System
-**Spec:** Section 5 (Notification & Alarm Behavior)
-**Status:** Not implemented
-
-**Tasks:**
-- [ ] Implement notification tier escalation sounds:
-  - calm/casual: gentle chime
-  - pointed/urgent: pointed beep
-  - pushing/firm: urgent siren
-  - critical/alarm: looping alarm
-- [ ] Implement DND detection and handling
-- [ ] Implement quiet hours (configurable, default 10pm-7am)
-- [ ] Implement chain overlap serialization
-- [ ] Implement T-0 alarm looping until user action
-- [ ] Implement 15-minute overdue anchor drop rule
-- [ ] Display notification: destination, time remaining, voice personality icon
-- [ ] Write notification tests (TC-01 through TC-06)
-
-### P4-T2: Sound Library
-**Spec:** Section 12 (Sound Library)
-**Status:** Not implemented
+#### 4.1 Notification Behavior System
+**Priority:** P1
+**Files:** `src/lib/notification_service.py`
 
 **Tasks:**
-- [ ] Define sound categories: commute, routine, errand, custom
-- [ ] Bundle 5 built-in sounds per category
-- [ ] Implement custom audio import (MP3, WAV, M4A, max 30 seconds)
-- [ ] Implement per-reminder sound selection
-- [ ] Store sound selection in reminder record
-- [ ] Implement corrupted sound fallback to category default
-- [ ] Write sound library tests (TC-01 through TC-05)
+- [ ] Implement urgency tier → notification sound mapping
+- [ ] DND detection and suppression logic
+- [ ] Quiet hours configuration and enforcement
+- [ ] Overdue anchor handling (15-min rule)
+- [ ] Chain overlap serialization queue
+- [ ] T-0 alarm looping until user action
+
+**Acceptance:** TC-01 through TC-06 from spec pass.
 
 ---
 
-## Priority 5: Platform Integration
+### Phase 5: Background & Mobile Features
 
-### P5-T1: Calendar Adapter
-**Spec:** Section 7 (Calendar Integration)
-**Status:** Not implemented
-
-**Tasks:**
-- [ ] Create `src/lib/adapters/calendar_adapter.py`:
-  - Define `ICalendarAdapter` interface
-  - Implement `AppleCalendarAdapter` (EventKit)
-  - Implement `GoogleCalendarAdapter` (Google Calendar API)
-- [ ] Implement calendar sync (on launch, every 15 min, background)
-- [ ] Filter events with non-empty location field
-- [ ] Implement suggestion cards for calendar events
-- [ ] Handle recurring events
-- [ ] Handle permission denial gracefully
-- [ ] Handle sync failure gracefully
-- [ ] Write calendar tests (TC-01 through TC-06)
-
-### P5-T2: Location Awareness
-**Spec:** Section 8 (Location Awareness)
-**Status:** Not implemented
+#### 5.1 Background Scheduling
+**Priority:** P1
+**Files:** `src/lib/background_scheduler.py`
 
 **Tasks:**
-- [ ] Store origin (address or current location at creation)
-- [ ] Implement single location check at departure anchor
-- [ ] Implement 500m geofence comparison
-- [ ] Implement immediate escalation if user still at origin
-- [ ] Request location permission at first location-aware reminder
-- [ ] Implement fallback when permission denied
-- [ ] Ensure no location history is stored
-- [ ] Write location tests (TC-01 through TC-05)
+- [ ] Notifee integration (iOS BGTaskScheduler + Android WorkManager)
+- [ ] Anchor registration as individual background tasks
+- [ ] Recovery scan on app launch
+- [ ] Re-registration of pending anchors on crash recovery
+- [ ] Late fire warning (>60s delay)
 
-### P5-T3: Background Scheduling
-**Spec:** Section 6 (Background Scheduling & Reliability)
-**Status:** Not implemented
+**Acceptance:** TC-01 through TC-06 from spec pass.
+
+#### 5.2 Location Awareness
+**Priority:** P2
+**Files:** `src/lib/location_service.py`
 
 **Tasks:**
-- [ ] (React Native) Install and configure notifee
-- [ ] Register each anchor as individual background task
-- [ ] Implement iOS BGAppRefreshTask / BGProcessingTask
-- [ ] Implement recovery scan on app launch
-- [ ] Implement overdue anchor handling (15-minute grace window)
-- [ ] Implement late fire warning (>60 seconds)
-- [ ] Re-register pending anchors on crash recovery
-- [ ] Write background scheduling tests (TC-01 through TC-06)
+- [ ] Single location check at departure anchor only
+- [ ] Origin resolution (address or device location)
+- [ ] 500m geofence comparison
+- [ ] Immediate critical tier fire if still at origin
+- [ ] Permission request on first location-aware reminder
+- [ ] No location history retention
+
+**Acceptance:** TC-01 through TC-05 from spec pass.
+
+#### 5.3 Calendar Integration
+**Priority:** P2
+**Files:** `src/lib/adapters/calendar_adapter.py`, `src/lib/adapters/calendar_eventkit.py`, `src/lib/adapters/calendar_google.py`
+
+**Tasks:**
+- [ ] `ICalendarAdapter` interface
+- [ ] Apple Calendar via EventKit
+- [ ] Google Calendar API integration
+- [ ] Suggestion cards for events with locations
+- [ ] Recurring event handling
+- [ ] Permission denial handling
+
+**Acceptance:** TC-01 through TC-06 from spec pass.
 
 ---
 
-## Implementation Order Summary
+### Phase 6: User Interaction
+
+#### 6.1 Snooze & Dismissal Flow
+**Priority:** P2
+**Files:** `src/lib/snooze_service.py`, `src/lib/dismissal_service.py`
+
+**Tasks:**
+- [ ] Tap snooze (1 min default)
+- [ ] Tap-and-hold custom snooze picker (1, 3, 5, 10, 15 min)
+- [ ] Chain re-computation after snooze
+- [ ] Re-registration with Notifee
+- [ ] Swipe-to-dismiss feedback prompt
+- [ ] Feedback type storage and processing
+
+**Acceptance:** TC-01 through TC-06 from spec pass.
+
+#### 6.2 Sound Library
+**Priority:** P3
+**Files:** `src/lib/sound_library.py`
+
+**Tasks:**
+- [ ] Built-in sounds (5 per category: commute, routine, errand)
+- [ ] Custom audio import (MP3, WAV, M4A, max 30s)
+- [ ] Sound transcoding/normalization
+- [ ] Per-reminder sound selection
+- [ ] Corrupted sound fallback
+
+**Acceptance:** TC-01 through TC-05 from spec pass.
+
+---
+
+### Phase 7: Stats & Feedback
+
+#### 7.1 Complete History & Stats System
+**Priority:** P2
+**Files:** `src/lib/stats_service.py`, `src/lib/feedback_loop.py`
+
+**Tasks:**
+- [ ] Implement "common miss window" identification
+- [ ] Complete streak counter (increment on hit, reset on miss)
+- [ ] Drive duration adjustment with cap (+15 min max)
+- [ ] 90-day retention with archive
+
+**Acceptance:** TC-01 through TC-07 from spec pass.
+
+---
+
+### Phase 8: Testing & Validation
+
+#### 8.1 Test Suite
+**Priority:** P1 (ongoing throughout)
+**Files:** `harness/test_*.py` or `tests/`
+
+**Tasks:**
+- [ ] Unit tests for chain engine determinism
+- [ ] Parser fixture tests
+- [ ] TTS adapter mock tests
+- [ ] LLM adapter mock tests
+- [ ] Keyword extraction tests
+- [ ] Schema validation tests
+- [ ] Integration tests (full flows)
+- [ ] E2E test setup
+
+**Acceptance:** All TC-* scenarios from spec pass, CI blocks merge on failure.
+
+---
+
+## Task Summary by Priority
+
+### P0 (Critical Path - Implement First)
+1. Complete database schema and migrations
+2. Complete escalation chain engine
+
+### P1 (Core Features)
+3. LLM adapter interface + implementations
+4. TTS adapter interface + implementations
+5. Reminder creation workflow
+6. Notification behavior system
+7. Background scheduling
+
+### P2 (Important Features)
+8. Voice personality enhancements (variations)
+9. Snooze & dismissal flow
+10. Location awareness
+11. Calendar integration
+12. Complete stats & feedback loop
+
+### P3 (Nice to Have)
+13. Sound library with custom import
+
+### P4 (Continuous)
+14. Test suite completion
+
+---
+
+## Dependencies Map
 
 ```
-Phase 1: Foundation
-├── P1-T1: Database Schema & Migrations
-├── P1-T2: Test Infrastructure
-└── P1-T3: Chain Engine Completion
-
-Phase 2: Core Logic
-├── P2-T1: LLM Adapter Interface
-├── P2-T2: Parser Enhancement
-├── P2-T3: TTS Adapter Interface
-└── P2-T4: Voice Personality Enhancement
-
-Phase 3: Business Logic
-├── P3-T1: Snooze & Dismissal Logic
-├── P3-T2: Feedback Loop
-└── P3-T3: Stats Calculations
-
-Phase 4: User Experience
-├── P4-T1: Notification System
-└── P4-T2: Sound Library
-
-Phase 5: Platform Integration
-├── P5-T1: Calendar Adapter
-├── P5-T2: Location Awareness
-└── P5-T3: Background Scheduling
-```
-
----
-
-## Test Coverage Requirements
-
-Per Section 14, every acceptance criterion must have passing tests.
-
-| Section | Test Scenarios | Status |
-|---------|----------------|--------|
-| 2 - Chain Engine | TC-01 through TC-06 | 0/6 |
-| 3 - Parser | TC-01 through TC-07 | 0/7 |
-| 4 - TTS | TC-01 through TC-05 | 0/5 |
-| 5 - Notifications | TC-01 through TC-06 | 0/6 |
-| 6 - Background | TC-01 through TC-06 | 0/6 |
-| 7 - Calendar | TC-01 through TC-06 | 0/6 |
-| 8 - Location | TC-01 through TC-05 | 0/5 |
-| 9 - Snooze | TC-01 through TC-06 | 0/6 |
-| 10 - Voice | TC-01 through TC-05 | 0/5 |
-| 11 - Stats | TC-01 through TC-07 | 0/7 |
-| 12 - Sound | TC-01 through TC-05 | 0/5 |
-| 13 - Database | TC-01 through TC-05 | 0/5 |
-| **Total** | **69 scenarios** | **0/69** |
-
----
-
-## Directory Structure (Target)
-
-```
-src/
-├── __init__.py
-├── test_server.py          # Current server (keep for harness)
-├── lib/
-│   ├── __init__.py
-│   ├── database.py         # Schema, migrations, connections
-│   ├── chain_engine.py     # Escalation chain computation
-│   ├── parser.py           # LLM + keyword parsing
-│   ├── voice.py            # TTS and voice personality
-│   ├── notifications.py    # Notification & alarm behavior
-│   ├── snooze.py           # Snooze & dismissal logic
-│   ├── stats.py            # History & stats calculations
-│   ├── sound_library.py    # Sound management
-│   └── adapters/
-│       ├── __init__.py
-│       ├── base.py         # Abstract interfaces
-│       ├── llm_adapter.py  # LLM (MiniMax, Anthropic)
-│       ├── tts_adapter.py  # TTS (ElevenLabs)
-│       └── calendar_adapter.py  # Calendar integration
-tests/
-├── __init__.py
-├── conftest.py             # Fixtures
-├── test_chain_engine.py
-├── test_parser.py
-├── test_voice_personalities.py
-├── test_stats.py
-├── test_database.py
-├── test_notifications.py
-├── test_snooze.py
-├── test_sound_library.py
-├── test_location.py
-├── test_calendar.py
-└── test_background.py
+┌─────────────────────────────────────────────────────────────┐
+│ Database Schema (1.1)                                        │
+│    └─────────────────────────────────────────────────────────┤
+│         │                                                    │
+│         ▼                                                    │
+│  ┌─────────────────┐     ┌─────────────────┐               │
+│  │ Chain Engine    │     │ Stats Service   │               │
+│  │   (1.2)         │     │   (7.1)         │               │
+│  └────────┬────────┘     └────────┬────────┘               │
+│           │                         │                        │
+│           ▼                         ▼                        │
+│  ┌─────────────────────────────────────────────────┐        │
+│  │         Reminder Creation (2.2)                 │        │
+│  │    ┌────────────────┐  ┌────────────────┐       │        │
+│  │    │ LLM Adapter    │  │ TTS Adapter    │       │        │
+│  │    │   (2.1)        │  │   (3.1)        │       │        │
+│  │    └────────────────┘  └────────────────┘       │        │
+│  └─────────────────────────────────────────────────┘        │
+│           │                                                 │
+│           ▼                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌────────────┐ │
+│  │ Notification    │  │ Background      │  │ Snooze     │ │
+│  │   (4.1)         │  │   Scheduler     │  │   (6.1)    │ │
+│  └────────┬────────┘  │   (5.1)         │  └─────┬──────┘ │
+│           │           └────────┬────────┘        │        │
+│           │                    │                 │        │
+│           ▼                    ▼                 ▼        │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │                 Location (5.2) + Calendar (5.3)         ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Open Questions (Pending Clarification)
+## Estimated Effort
 
-1. **Platform:** React Native or Flutter? (Spec mentions both)
-2. **TTS Caching:** Local filesystem or in-memory for tests?
-3. **Database Path:** `/tmp/urgent-alarm.db` or app-specific storage?
-4. **API Keys:** Environment variables for MiniMax, ElevenLabs?
-5. **iOS/Android Parity:** Focus on iOS first or dual-platform?
-6. **Background Scheduling:** This is a mobile-specific feature - how to test in Python harness?
+| Phase | Tasks | Notes |
+|-------|-------|-------|
+| Phase 1 | 2 | Foundation - blocks everything |
+| Phase 2 | 2 | Parser + creation flow |
+| Phase 3 | 2 | TTS + voice system |
+| Phase 4 | 1 | Notifications |
+| Phase 5 | 3 | Background, location, calendar |
+| Phase 6 | 2 | Snooze/dismissal, sound library |
+| Phase 7 | 1 | Stats + feedback loop |
+| Phase 8 | 1 | Testing (continuous) |
+| **Total** | **14** | |
 
 ---
 
-## Quick Start Commands
-
-```bash
-# Run existing server
-python3 src/test_server.py
-
-# Run tests (once created)
-python3 -m pytest tests/ -v
-
-# Typecheck (if added)
-python3 -m py_compile src/lib/*.py
-
-# Lint
-python3 -m py_compile src/test_server.py
-```
+*Generated: 2026-04-08*
