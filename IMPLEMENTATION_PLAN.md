@@ -15,7 +15,7 @@ This document maps the specification requirements to implementation tasks, prior
 | 7. Calendar Integration | None | EventKit (iOS), Google Calendar API, suggestion cards not implemented |
 | 8. Location Awareness | None | Single-point CoreLocation check, 500m geofence, escalation on "still at origin" not implemented |
 | 9. Snooze & Dismissal | Partial | Basic history recording (lines 548-587), missing tap/tap-hold/swipe interactions, chain re-computation after snooze, persistence across restarts |
-| 10. Voice Personality | Partial | 5 personalities exist with 1 template per tier (lines 299-350), missing 3+ variations per tier, custom prompt support (max 200 chars) |
+| 10. Voice Personality | Partial | 5 built-in + custom exist with 1 template per tier, missing 3+ variations per tier, custom prompt support (max 200 chars) |
 | 11. History & Stats | Partial | Basic hit rate exists (lines 370-389), missing streak counter, common miss window, feedback loop with +2min adjustment capped at +15min |
 | 12. Sound Library | None | Built-in sounds (5 per category), custom import (MP3/WAV/M4A max 30s), transcoding, fallback handling not implemented |
 | 13. Data Persistence | Partial | Basic schema in test_server.py (lines 23-87), missing versioned migrations, in-memory test mode, origin_lat/lng, calendar_event_id, custom_sounds table, destination_adjustments with proper cap logic |
@@ -30,10 +30,21 @@ This document maps the specification requirements to implementation tasks, prior
 - ✅ Basic hit rate calculation (`calculate_hit_rate`, lines 370-389)
 - ✅ HTTP test endpoints (8 endpoints for harness validation)
 
+**Current Implementation Status**
+
+`src/test_server.py` (628 lines) provides a proof-of-concept with:
+- ✅ SQLite database with 5 tables (reminders, anchors, history, destination_adjustments, user_preferences) - simplified schema vs spec
+- ✅ Chain engine (`compute_escalation_chain`, lines 103-179) - basic anchor generation with buffer-based compression
+- ✅ Keyword parser (`parse_reminder_natural`, lines 193-296) - regex-based fallback extraction
+- ✅ Voice personality templates (6 personalities: coach, assistant, best_friend, no_nonsense, calm, custom, lines 299-350) - **1 template per tier**, needs 3+ variations
+- ✅ Basic hit rate calculation (`calculate_hit_rate`, lines 370-389)
+- ✅ HTTP test endpoints (8 endpoints for harness validation)
+
 **Missing from current implementation:**
 - ❌ `get_next_unfired_anchor(reminder_id)` function for scheduler recovery (Section 2.3.6)
 - ❌ `snoozed_to` field in anchors table for snooze state
 - ❌ `tts_fallback` boolean field in anchors table
+- ❌ `tts_clip_path` is not persisted to anchors table (only stored in memory during generation)
 - ❌ Unit tests for chain engine scenarios (TC-01 through TC-06 in spec)
 - ❌ LLM adapter interface (`ILanguageModelAdapter`) - spec Section 3.3
 - ❌ Mock LLM adapter returning predefined fixtures - spec Section 3.3.3
@@ -48,7 +59,8 @@ This document maps the specification requirements to implementation tasks, prior
 - ❌ Chain re-computation after snooze - spec Section 9.3.3
 - ❌ Versioned database migrations - spec Section 13.3
 - ❌ In-memory test mode (`?mode=memory`) - spec Section 13.3.3
-- ❌ Full spec schema (origin_lat/lng, origin_address, calendar_event_id, custom_sounds, etc.)
+- ❌ Full spec schema (origin_lat/lng, origin_address, calendar_event_id, custom_sounds table, etc.)
+- ❌ Snooze interaction handlers (tap, tap-and-hold, swipe)
 
 ---
 
