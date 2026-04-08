@@ -1,13 +1,13 @@
 # URGENT — AI Escalating Voice Alarm Implementation Plan
 
 ## Overview
-This document maps the specification requirements to implementation tasks, prioritized by dependencies. The plan assumes a React Native + Python backend architecture.
+This document maps the specification requirements to implementation tasks, prioritized by dependencies. The plan assumes a React Native (mobile) + Python (backend) architecture.
 
 ## Gap Analysis Summary
 
 | Spec Section | Status | Gap |
 |-------------|--------|-----|
-| 2. Escalation Chain Engine | Partial | Missing `get_next_unfired_anchor`, `snoozed_to`/`tts_fallback` fields (not in schema lines 44-56), unit tests for all 6 scenarios |
+| 2. Escalation Chain Engine | Partial | Missing `get_next_unfired_anchor`, `snoozed_to`/`tts_fallback` fields in schema, unit tests for all 6 scenarios |
 | 3. Reminder Parsing | Partial | Keyword parser exists (test_server.py:193-296), missing LLM adapter interface, mock adapter, system prompt-based extraction |
 | 4. Voice & TTS Generation | Partial | Templates exist (1 per tier, test_server.py:299-350), missing TTS adapter, caching at `/tts_cache/{reminder_id}/`, needs 3+ variations per tier |
 | 5. Notification & Alarm | None | DND handling, quiet hours (10pm-7am), chain overlap serialization, notification tier sounds, visual+vibration at T-5 |
@@ -25,7 +25,7 @@ This document maps the specification requirements to implementation tasks, prior
 `src/test_server.py` (628 lines) proof-of-concept with 15 scenario files in `scenarios/`:
 
 **✅ Implemented (verified from code at lines):**
-- SQLite with 5 tables (reminders lines 28-42, anchors lines 44-56, history lines 58-68, destination_adjustments lines 70-77, user_preferences lines 79-84) - simplified schema
+- SQLite with 5 tables (reminders lines 28-42, anchors lines 44-56, history lines 58-68, destination_adjustments lines 70-77, user_preferences lines 79-85) - simplified schema
 - Chain engine (`compute_escalation_chain`, lines 103-179) - buffer-based compression (full/compressed/short/minimum), correct 8/5/3/1 anchor outputs
 - Keyword parser (`parse_reminder_natural`, lines 193-296) - regex-based extraction with fallback, confidence calculation
 - Voice personality templates (6 personalities: coach, assistant, best_friend, no_nonsense, calm, custom; lines 299-350) - **1 template per tier**, needs 3+ variations
