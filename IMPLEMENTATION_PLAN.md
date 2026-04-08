@@ -35,6 +35,18 @@ This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04
 1. **3-min buffer produces 2 anchors instead of 3** — Current: firm + alarm. Spec requires: firm + critical + alarm (TC-03)
 2. **120-min validation passes** — Should fail with "drive_duration exceeds time_to_arrival" (TC-04)
 
+Verified by running:
+```python
+# 3-min buffer: produces 2 anchors (firm, alarm) but spec requires 3 (firm, critical, alarm)
+anchors = compute_escalation_chain(arrival, 3)
+# Output: 2 anchors - firm at 08:58, alarm at 09:00
+# Expected: 3 anchors - firm, critical, alarm
+
+# 120-min validation: should reject but returns valid=True
+validate_chain(arrival, 120)
+# Output: {'valid': True} but should be {'valid': False, 'error': 'drive_duration exceeds time_to_arrival'}
+```
+
 ---
 
 ## Priority 0: Critical Path (Must Do First)
@@ -43,7 +55,7 @@ This plan maps the detailed specification (`specs/urgent-voice-alarm-app-2026-04
 **Spec Section:** Harness Validation  
 **Status:** NOT STARTED (blocking all validation)
 
-**Why Critical:** Cannot validate any implementation without the harness. All 16 scenarios are defined but unrunnable.
+**Why Critical:** Cannot validate any implementation without the harness. All 15 scenarios are defined but unrunnable.
 
 **Files to Create:**
 ```
@@ -82,14 +94,14 @@ harness/
    - `LLMJudgeAssertion` — call LLM to evaluate scenario success
 
 **Acceptance Criteria:**
-- [ ] `python3 harness/scenario_harness.py --project otto-matic` runs against `scenarios/*.yaml`
-- [ ] Scenario parser loads all 16 YAML files
+- [ ] `python3 harness/scenario_harness.py --project urgent-alarm` runs against `scenarios/*.yaml`
+- [ ] Scenario parser loads all 15 YAML files
 - [ ] HTTP assertions work against `localhost:8090`
 - [ ] DB record assertions query SQLite directly
 - [ ] Results printed with PASS/FAIL per scenario with details
 
 **Dependencies:** None  
-**Validation:** `python3 src/test_server.py &` then `sudo python3 harness/scenario_harness.py --project otto-matic`
+**Validation:** `python3 src/test_server.py &` then `sudo python3 harness/scenario_harness.py --project urgent-alarm`
 
 ---
 
@@ -501,7 +513,7 @@ Priority 4: User Interaction
 
 | Component | Status | Test Scenarios | Notes |
 |-----------|--------|----------------|-------|
-| P0.1 Scenario Harness | NOT STARTED | 0/16 | BLOCKING — cannot validate anything |
+| P0.1 Scenario Harness | NOT STARTED | 0/15 | BLOCKING — cannot validate anything |
 | P0.2 Modular Architecture | NOT STARTED | 0 | `src/lib/` does not exist |
 | 1.1 Database & Migrations | PARTIAL | 0/5 | Missing columns, no migration system |
 | 1.2 Chain Engine | PARTIAL | 2/6 | **BUGS:** 3-min → 2 anchors (need 3), 120-min validation passes (should fail) |
@@ -534,7 +546,7 @@ Priority 4: User Interaction
 
 ## Success Criteria
 
-- [ ] Scenario harness runs all 16 scenarios and reports PASS/FAIL per scenario
+- [ ] Scenario harness runs all 15 scenarios and reports PASS/FAIL per scenario
 - [ ] Modular architecture in `src/lib/` with all modules implemented
 - [ ] Chain engine produces correct anchors for all buffer sizes (TC-01 through TC-06)
 - [ ] **FIXED:** 3-min buffer produces exactly 3 anchors: firm, critical, alarm
@@ -564,10 +576,10 @@ python3 -m py_compile harness/scenario_harness.py src/test_server.py
 python3 src/test_server.py &
 
 # Run harness against scenarios
-sudo python3 harness/scenario_harness.py --project otto-matic
+sudo python3 harness/scenario_harness.py --project urgent-alarm
 
 # Or test with local scenarios
-OTTO_SCENARIO_DIR=./scenarios python3 harness/scenario_harness.py --project otto-matic
+OTTO_SCENARIO_DIR=./scenarios python3 harness/scenario_harness.py --project urgent-alarm
 
 # Run pytest if tests exist
 python3 -m pytest harness/
