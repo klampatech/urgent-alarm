@@ -6,50 +6,36 @@ This is a mobile app for AI-powered escalating voice alarms. The current codebas
 
 ---
 
-## Current Implementation Status
+## Current Implementation Status (as of 2026-04-08)
 
-### Implemented (17 scenarios passing)
-| Component | Status | Scenarios |
-|-----------|--------|-----------|
-| Chain Engine - Full 30min | ✅ Complete | `chain-full-30min.yaml` |
-| Chain Engine - Compressed 15min | ✅ Complete | `chain-compressed-15min.yaml` |
-| Chain Engine - Minimum 3min | ✅ Complete | `chain-minimum-3min.yaml` |
-| Chain Engine - Invalid rejection | ✅ Complete | `chain-invalid-rejected.yaml` |
-| Parser - Natural language | ✅ Complete | `parse-natural-language.yaml` |
-| Parser - Simple countdown | ✅ Complete | `parse-simple-countdown.yaml` |
-| Parser - Tomorrow resolution | ✅ Complete | `parse-tomorrow.yaml` |
-| Voice - Coach personality | ✅ Complete | `voice-coach-personality.yaml` |
-| Voice - No-nonsense personality | ✅ Complete | `voice-no-nonsense.yaml` |
-| Voice - All personalities | ✅ Complete | `voice-all-personalities.yaml` |
-| History - Record outcome | ✅ Complete | `history-record-outcome.yaml` |
-| History - Miss feedback | ✅ Complete | `history-record-miss-feedback.yaml` |
-| Stats - Hit rate | ✅ Complete | `stats-hit-rate.yaml` |
-| Reminder - CRUD | ✅ Complete | `reminder-creation-crud.yaml` |
-| Reminder - Cascade delete | ✅ Complete | `reminder-creation-cascade-delete.yaml` |
+### Implemented in `test_server.py`
+| Component | Status | Details |
+|-----------|--------|---------|
+| Chain Engine - Core logic | ✅ Complete | `compute_escalation_chain()` with 8-tier system |
+| Chain Engine - Validation | ✅ Complete | `validate_chain()` checks |
+| Parser - Keyword extraction | ✅ Complete | `parse_reminder_natural()` with regex patterns |
+| Voice - All 5 personalities | ✅ Complete | `generate_voice_message()` with templates |
+| Voice - Message templates | ✅ Complete | 8 tiers per personality |
+| Database - Core tables | ✅ Complete | reminders, anchors, history, destination_adjustments, user_preferences |
+| HTTP API - Core endpoints | ✅ Complete | /health, /chain, /reminders, /parse, /voice/message, /history, /anchors/fire |
+| Stats - Hit rate | ✅ Complete | `calculate_hit_rate()` |
+| Feedback - Adjustment tracking | ✅ Partial | Basic +2 min per miss, no cap enforcement |
 
-### Partially Implemented
-| Component | Status | Gap |
-|----------|--------|-----|
-| Chain Engine | Partial | Missing `get_next_unfired_anchor()`, chain recomputation, snooze handling |
-| Parser | Partial | Missing LLM adapter (MiniMax, Anthropic), mock interface |
-| Voice | Partial | Missing custom prompts, message variations (min 3 per tier) |
-| Stats | Partial | Missing streak counter, common miss window, adjustment cap enforcement |
-| Database | Partial | Missing 15+ columns, migration system, WAL mode |
-
-### Not Implemented (MISSING)
-| Component | Priority | Spec Section |
-|-----------|----------|--------------|
-| LLM Adapter (MiniMax, Anthropic, Mock) | HIGH | Section 3 |
-| TTS Adapter (ElevenLabs, Mock, Clip caching) | HIGH | Section 4 |
-| Snooze & Dismissal Flow | HIGH | Section 9 |
-| Feedback Loop (adjustments, cap, streak) | HIGH | Section 11 |
-| Background Scheduling (Notifee) | MEDIUM | Section 6 |
-| Notification & Alarm Behavior (DND, quiet hours) | MEDIUM | Section 5 |
-| Location Awareness | MEDIUM | Section 8 |
-| Calendar Integration (EventKit, Google) | MEDIUM | Section 7 |
-| Sound Library (bundled + custom import) | MEDIUM | Section 12 |
-| Migration System | MEDIUM | Section 13 |
-| Data Retention (90-day archiving) | LOW | Section 11 |
+### Missing / Incomplete
+| Component | Priority | Gap |
+|-----------|----------|-----|
+| LLM Adapter (interface + MiniMax/Anthropic/Mock) | HIGH | Spec Section 3 |
+| TTS Adapter (interface + ElevenLabs/Mock) | HIGH | Spec Section 4 |
+| Snooze & Dismissal Flow | HIGH | Spec Section 9 |
+| Feedback Loop - Adjustment cap, streak, miss window | HIGH | Spec Section 11 |
+| Chain Engine - get_next_unfired_anchor, determinism tests | HIGH | Spec Section 2 |
+| Background Scheduling (Notifee) | MEDIUM | Spec Section 6 |
+| Notification & Alarm Behavior (DND, quiet hours) | MEDIUM | Spec Section 5 |
+| Location Awareness | MEDIUM | Spec Section 8 |
+| Calendar Integration | MEDIUM | Spec Section 7 |
+| Sound Library | MEDIUM | Spec Section 12 |
+| Database - Migration system | MEDIUM | Spec Section 13 |
+| Database - Missing columns | MEDIUM | origin_*, calendar_event_id, custom_sound_path, etc. |
 
 ---
 
@@ -58,63 +44,65 @@ This is a mobile app for AI-powered escalating voice alarms. The current codebas
 ### 1.1 Chain Engine Completeness
 **Spec:** Section 2.3 (FR #6, #7), TC-05, TC-06
 
+**Current Status:** Basic chain computation works, missing recovery functions.
+
 **Tasks:**
 - [ ] `get_next_unfired_anchor(reminder_id)` - Returns earliest unfired anchor
-- [ ] Anchor sorting by timestamp ascending
-- [ ] Chain recomputation after snooze (shift remaining anchors)
-- [ ] Snooze persistence (`snoozed_to` field)
-- [ ] Unit tests for chain determinism (same inputs → same outputs)
+- [ ] Anchor sorting by timestamp ascending (verify)
+- [ ] Chain determinism verification (same inputs → same outputs)
+- [ ] Unit tests for chain determinism
 
 **Endpoints to add:**
 ```
 GET  /anchors/next?reminder_id={id}  # get next unfired anchor
-POST /reminders/{id}/snooze          # snooze with duration param
-POST /reminders/{id}/dismiss         # dismiss with feedback
 ```
 
-**Validation:**
-```yaml
-# chain-next-unfired-anchor.yaml
-# chain-determinism.yaml
-```
+**Scenarios to create:**
+- [ ] `chain-next-unfired-anchor.yaml`
+- [ ] `chain-determinism.yaml`
 
 ---
 
 ### 1.2 LLM Adapter for Parsing
 **Spec:** Section 3.3 (FR #1-8), TC-01 to TC-07
 
+**Current Status:** Only keyword extraction exists, no LLM integration.
+
 **Tasks:**
-- [ ] `ILanguageModelAdapter` interface (mock-able)
-- [ ] `MinimaxAdapter` (Anthropic-compatible endpoint)
-- [ ] `AnthropicAdapter` for direct API
-- [ ] Mock adapter for testing with fixture responses
+- [ ] Create `ILanguageModelAdapter` interface (abstract base class)
+- [ ] Implement `MinimaxAdapter` (Anthropic-compatible endpoint)
+- [ ] Implement `AnthropicAdapter` for direct API
+- [ ] Implement `MockLanguageModelAdapter` for testing with fixture responses
 - [ ] Wire adapter into `/parse` endpoint with keyword fallback
-- [ ] Handle "unintelligible input" error case
+- [ ] Handle "unintelligible input" error case (return confidence < 0.5)
 
 **Configuration:**
 ```bash
-LLM_PROVIDER=minimax|anthropic
+LLM_PROVIDER=minimax|anthropic|mock
 MINIMAX_API_KEY=xxx
 ANTHROPIC_API_KEY=xxx
+LLM_MOCK_FIXTURE={"destination": "...", "arrival_time": "...", "drive_duration": 30}
 ```
 
-**Scenarios:**
-- [ ] `parse-llm-fallback-keyword.yaml` (TC-04)
-- [ ] `parse-manual-field-correction.yaml` (TC-05)
-- [ ] `parse-unintelligible-rejection.yaml` (TC-06)
-- [ ] `parse-mock-adapter-test.yaml` (TC-07)
+**Scenarios to create:**
+- [ ] `parse-llm-success.yaml`
+- [ ] `parse-llm-fallback-keyword.yaml`
+- [ ] `parse-unintelligible-rejection.yaml`
+- [ ] `parse-mock-adapter-test.yaml`
 
 ---
 
 ### 1.3 TTS Adapter & Clip Caching
 **Spec:** Section 4.3 (FR #1-9), TC-01 to TC-05
 
+**Current Status:** Voice messages are text-only, no actual TTS.
+
 **Tasks:**
-- [ ] `ITTSAdapter` interface (mock-able)
-- [ ] `ElevenLabsAdapter` with voice ID mapping
-- [ ] Mock TTS adapter for testing (writes silent file)
+- [ ] Create `ITTSAdapter` interface (abstract base class)
+- [ ] Implement `ElevenLabsAdapter` with voice ID mapping
+- [ ] Implement `MockTTSAdapter` for testing (writes silent audio file)
 - [ ] TTS generation at reminder creation (async with 30s timeout)
-- [ ] Clip caching at `/tts_cache/{reminder_id}/{anchor_id}.mp3`
+- [ ] Clip caching at `{TTS_CACHE_DIR}/{reminder_id}/{anchor_id}.mp3`
 - [ ] Cache invalidation on reminder deletion
 - [ ] Fallback behavior on API failure (`tts_fallback=true`)
 
@@ -122,75 +110,82 @@ ANTHROPIC_API_KEY=xxx
 ```bash
 ELEVENLABS_API_KEY=xxx
 TTS_CACHE_DIR=/tts_cache
+VOICE_IDS={"coach": "voice_id_1", "assistant": "voice_id_2", ...}
 ```
 
-**Endpoints:**
+**Endpoints to add:**
 ```
 POST /tts/generate        # Pre-generate clips for reminder
-DELETE /tts/cache/{id}   # Clear cache for reminder
+GET  /tts/clips/{reminder_id}  # List cached clips
+DELETE /tts/cache/{reminder_id}   # Clear cache for reminder
 ```
 
-**Scenarios:**
-- [ ] `tts-clip-generation-at-creation.yaml` (TC-01)
-- [ ] `tts-anchor-fires-from-cache.yaml` (TC-02)
-- [ ] `tts-fallback-on-api-failure.yaml` (TC-03)
-- [ ] `tts-cache-cleanup-on-delete.yaml` (TC-04)
-- [ ] `tts-mock-in-tests.yaml` (TC-05)
+**Scenarios to create:**
+- [ ] `tts-clip-generation-at-creation.yaml`
+- [ ] `tts-anchor-fires-from-cache.yaml`
+- [ ] `tts-fallback-on-api-failure.yaml`
+- [ ] `tts-cache-cleanup-on-delete.yaml`
 
 ---
 
 ### 1.4 Snooze & Dismissal Flow
 **Spec:** Section 9.3 (FR #1-9), TC-01 to TC-06
 
+**Current Status:** Not implemented.
+
 **Tasks:**
-- [ ] Tap snooze (1 min default)
+- [ ] Tap snooze (1 min default) - `POST /reminders/{id}/snooze`
 - [ ] Tap-and-hold custom snooze picker (1, 3, 5, 10, 15 min)
-- [ ] Chain recomputation after snooze
-- [ ] Re-registration of snoozed anchors
-- [ ] Feedback prompt on dismiss
+- [ ] Chain recomputation after snooze (shift remaining anchors)
+- [ ] Re-registration of snoozed anchors with new timestamps
+- [ ] Feedback prompt on dismiss - `POST /reminders/{id}/dismiss`
 - [ ] TTS snooze confirmation: "Okay, snoozed {X} minutes"
-- [ ] Snooze persistence after restart
+- [ ] Snooze persistence after restart (store `snoozed_to` in anchors table)
 
 **Endpoints:**
 ```
 POST /reminders/{id}/snooze   # body: {duration: 1|3|5|10|15}
-POST /reminders/{id}/dismiss   # body: {feedback_type: "timing_right"|"left_too_early"|"left_too_late"|"other"}
+POST /reminders/{id}/dismiss  # body: {feedback_type: "timing_right"|"left_too_early"|"left_too_late"|"other"}
+GET  /reminders/{id}/chain    # Get chain status with snooze info
 ```
 
-**Scenarios:**
-- [ ] `snooze-tap-1min.yaml` (TC-01)
-- [ ] `snooze-custom-duration.yaml` (TC-02)
-- [ ] `snooze-chain-recompute.yaml` (TC-03)
-- [ ] `dismissal-feedback-timing-correct.yaml` (TC-04)
-- [ ] `dismissal-feedback-left-too-late.yaml` (TC-05)
-- [ ] `snooze-persistence-after-restart.yaml` (TC-06)
+**Scenarios to create:**
+- [ ] `snooze-tap-1min.yaml`
+- [ ] `snooze-custom-duration.yaml`
+- [ ] `snooze-chain-recompute.yaml`
+- [ ] `dismissal-feedback-timing-correct.yaml`
+- [ ] `dismissal-feedback-left-too-late.yaml`
+- [ ] `snooze-persistence-after-restart.yaml`
 
 ---
 
 ### 1.5 Feedback Loop & Destination Adjustments
 **Spec:** Section 11.3 (FR #1-7), TC-02 to TC-06
 
+**Current Status:** Basic +2 min per miss, missing cap and advanced features.
+
 **Tasks:**
-- [ ] Adjustment calculation: `stored_drive_duration + (late_count * 2_minutes)`
-- [ ] +15 minute cap on adjustment
-- [ ] Apply adjustments on new reminder creation
-- [ ] Common miss window tracking
-- [ ] Streak counter for recurring reminders
-- [ ] `GET /stats/destination/{destination}`
-- [ ] `GET /stats/streak`
+- [ ] Adjustment cap enforcement: `adjusted = min(original + (late_count * 2), original + 15)`
+- [ ] Apply adjustments when creating new reminder for same destination
+- [ ] Common miss window tracking (most frequently missed urgency tier)
+- [ ] Streak counter for recurring reminders (increment on hit, reset on miss)
+- [ ] `GET /stats/destination/{destination}` - adjustment info
+- [ ] `GET /stats/streak` - streak counter
+- [ ] 90-day data retention (archive old history)
 
 **Endpoints:**
 ```
-GET  /stats/destination/{destination}  # adjustment info
-GET  /stats/streak                      # streak counter
+GET  /stats/destination/{destination}
+GET  /stats/streak
+GET  /stats/common-miss-window
 ```
 
-**Scenarios:**
-- [ ] `destination-adjustment-calculation.yaml` (TC-02)
-- [ ] `destination-adjustment-cap.yaml` (TC-03)
-- [ ] `common-miss-window.yaml` (TC-04)
-- [ ] `streak-increment.yaml` (TC-05)
-- [ ] `streak-reset.yaml` (TC-06)
+**Scenarios to create:**
+- [ ] `destination-adjustment-calculation.yaml`
+- [ ] `destination-adjustment-cap.yaml` (verify 15-min cap)
+- [ ] `common-miss-window.yaml`
+- [ ] `streak-increment.yaml`
+- [ ] `streak-reset.yaml`
 
 ---
 
@@ -200,25 +195,26 @@ GET  /stats/streak                      # streak counter
 **Spec:** Section 6.3 (FR #1-8), TC-01 to TC-06
 
 **Tasks:**
-- [ ] Notifee integration for background tasks
-- [ ] Register anchors with Notifee at reminder creation
-- [ ] Recovery scan on app launch
-- [ ] Re-registration after crash
-- [ ] Late-fire warning (>60s)
+- [ ] Notifee integration (or mock for Python harness)
+- [ ] Register anchors with scheduler at reminder creation
+- [ ] Recovery scan on app/session start
+- [ ] Re-registration after crash (load unfired anchors, reschedule)
+- [ ] Late-fire warning logging (>60s after scheduled time)
+- [ ] 15-minute grace window for overdue anchors
 
 **Endpoints:**
 ```
-POST /anchors/{id}/schedule     # Register with Notifee
-GET  /anchors/pending            # List pending anchors
-GET  /anchors/overdue            # List overdue anchors
+POST /anchors/{id}/schedule     # Register with scheduler
 POST /scheduler/recovery-scan   # Run recovery scan
+GET  /anchors/pending           # List pending anchors
+GET  /anchors/overdue           # List overdue anchors (for logging)
 ```
 
-**Scenarios:**
-- [ ] `background-anchor-scheduling.yaml` (TC-01)
-- [ ] `background-recovery-scan.yaml` (TC-03, TC-04)
-- [ ] `background-pending-reregister.yaml` (TC-05)
-- [ ] `background-late-fire-warning.yaml` (TC-06)
+**Scenarios to create:**
+- [ ] `background-anchor-scheduling.yaml`
+- [ ] `background-recovery-scan.yaml`
+- [ ] `background-pending-reregister.yaml`
+- [ ] `background-late-fire-warning.yaml`
 
 ---
 
@@ -227,19 +223,27 @@ POST /scheduler/recovery-scan   # Run recovery scan
 
 **Tasks:**
 - [ ] DND detection and handling
-- [ ] Quiet hours suppression (default 10pm-7am)
+- [ ] Quiet hours suppression (configurable, default 10pm-7am)
 - [ ] Post-DND/quiet-hours catch-up queue
-- [ ] 15-minute overdue anchor drop
-- [ ] Chain overlap serialization
-- [ ] T-0 alarm looping
+- [ ] 15-minute overdue anchor drop (silent)
+- [ ] Chain overlap serialization (queue new anchors)
+- [ ] T-0 alarm looping until user action
 
-**Scenarios:**
-- [ ] `dnd-early-anchor-suppressed.yaml` (TC-01)
-- [ ] `dnd-final-5min-override.yaml` (TC-02)
-- [ ] `quiet-hours-suppression.yaml` (TC-03)
-- [ ] `overdue-anchor-drop-15min.yaml` (TC-04)
-- [ ] `chain-overlap-serialization.yaml` (TC-05)
-- [ ] `t0-alarm-loops.yaml` (TC-06)
+**Endpoints:**
+```
+GET  /system/dnd-status
+GET  /system/quiet-hours
+PUT  /system/quiet-hours        # body: {start: "22:00", end: "07:00"}
+GET  /queue/status              # Queue status for overlap handling
+```
+
+**Scenarios to create:**
+- [ ] `dnd-early-anchor-suppressed.yaml`
+- [ ] `dnd-final-5min-override.yaml`
+- [ ] `quiet-hours-suppression.yaml`
+- [ ] `overdue-anchor-drop-15min.yaml`
+- [ ] `chain-overlap-serialization.yaml`
+- [ ] `t0-alarm-loops.yaml`
 
 ---
 
@@ -247,19 +251,26 @@ POST /scheduler/recovery-scan   # Run recovery scan
 **Spec:** Section 8.3 (FR #1-8), TC-01 to TC-05
 
 **Tasks:**
-- [ ] Single-point location check at departure anchor
-- [ ] Origin resolution (address or device location)
+- [ ] Single-point location check at departure anchor only
+- [ ] Origin resolution (user-specified address or device location at creation)
 - [ ] 500m geofence comparison
-- [ ] "Still at origin" escalation
-- [ ] Location permission request timing
-- [ ] No location history storage
+- [ ] "Still at origin" escalation (fire firm/critical tier immediately)
+- [ ] Location permission request timing (at first location-aware reminder)
+- [ ] No location history storage (single comparison, discard)
 
-**Scenarios:**
-- [ ] `location-still-at-origin.yaml` (TC-01)
-- [ ] `location-already-left.yaml` (TC-02)
-- [ ] `location-permission-request.yaml` (TC-03)
-- [ ] `location-permission-denied.yaml` (TC-04)
-- [ ] `location-single-check-only.yaml` (TC-05)
+**Endpoints:**
+```
+POST /reminders/{id}/set-origin    # body: {address: "...", lat: xx, lng: xx}
+GET  /reminders/{id}/origin
+POST /location/check               # body: {reminder_id: "..."} - single check
+```
+
+**Scenarios to create:**
+- [ ] `location-still-at-origin.yaml`
+- [ ] `location-already-left.yaml`
+- [ ] `location-permission-request.yaml`
+- [ ] `location-permission-denied.yaml`
+- [ ] `location-single-check-only.yaml`
 
 ---
 
@@ -271,24 +282,27 @@ POST /scheduler/recovery-scan   # Run recovery scan
 - [ ] `AppleCalendarAdapter` (EventKit)
 - [ ] `GoogleCalendarAdapter` (Google Calendar API)
 - [ ] Calendar sync on launch + every 15 min
-- [ ] Suggestion card generation
-- [ ] Recurring event handling
-- [ ] Permission denial handling
+- [ ] Suggestion card generation for events with locations
+- [ ] Recurring event handling (generate reminder for each occurrence)
+- [ ] Permission denial handling with explanation
 - [ ] Sync failure graceful degradation
 
 **Endpoints:**
 ```
-GET  /calendar/events           # List calendar events with locations
-POST /calendar/suggestions/{id} # Create reminder from suggestion
+GET  /calendar/events              # List events with locations
+GET  /calendar/suggestions         # List suggestion cards
+POST /calendar/suggestions/{id}    # Create reminder from suggestion
+GET  /calendar/sync-status
+POST /calendar/sync               # Trigger manual sync
 ```
 
-**Scenarios:**
-- [ ] `calendar-apple-event-suggestion.yaml` (TC-01)
-- [ ] `calendar-google-event-suggestion.yaml` (TC-02)
-- [ ] `calendar-suggestion-to-reminder.yaml` (TC-03)
-- [ ] `calendar-permission-denial.yaml` (TC-04)
-- [ ] `calendar-sync-failure-degradation.yaml` (TC-05)
-- [ ] `calendar-recurring-event.yaml` (TC-06)
+**Scenarios to create:**
+- [ ] `calendar-apple-event-suggestion.yaml`
+- [ ] `calendar-google-event-suggestion.yaml`
+- [ ] `calendar-suggestion-to-reminder.yaml`
+- [ ] `calendar-permission-denial.yaml`
+- [ ] `calendar-sync-failure-degradation.yaml`
+- [ ] `calendar-recurring-event.yaml`
 
 ---
 
@@ -298,15 +312,16 @@ POST /calendar/suggestions/{id} # Create reminder from suggestion
 **Spec:** Section 10.3 (FR #1-6), TC-01 to TC-05
 
 **Tasks:**
-- [ ] Custom voice prompt support (max 200 chars)
-- [ ] Message template variations (min 3 per tier per personality)
+- [ ] Custom voice prompt support (max 200 characters)
+- [ ] Message template variations (minimum 3 per tier per personality)
 - [ ] Personality immutability for existing reminders
 - [ ] Voice preview functionality
 
 **Endpoints:**
 ```
-POST /voice/personality  # Set custom prompt
-GET  /voice/preview      # Preview voice message
+POST /voice/personality     # body: {personality: "custom", custom_prompt: "..."}
+GET  /voice/preview         # body: {personality, tier, destination, duration}
+GET  /voice/personalities    # List available personalities
 ```
 
 ---
@@ -318,181 +333,177 @@ GET  /voice/preview      # Preview voice message
 - [ ] Bundle 5 built-in sounds per category (Commute, Routine, Errand)
 - [ ] Per-reminder sound selection storage
 - [ ] Custom audio import (MP3, WAV, M4A, max 30s)
-- [ ] Audio transcoding to normalized format
-- [ ] Corrupted sound fallback
+- [ ] Audio validation and storage
+- [ ] Corrupted sound fallback to category default
 
 **Endpoints:**
 ```
-GET  /sounds/categories     # List sound categories
+GET  /sounds/categories
 GET  /sounds                 # List available sounds
-POST /sounds/import          # Import custom sound
+POST /sounds/import          # Import custom sound (multipart/form-data)
+DELETE /sounds/{id}          # Delete custom sound
 ```
 
-**Scenarios:**
-- [ ] `sound-builtin-playback.yaml` (TC-01)
-- [ ] `sound-custom-import.yaml` (TC-02)
-- [ ] `sound-custom-playback.yaml` (TC-03)
-- [ ] `sound-corrupted-fallback.yaml` (TC-04)
-- [ ] `sound-persistence-on-edit.yaml` (TC-05)
+**Scenarios to create:**
+- [ ] `sound-builtin-playback.yaml`
+- [ ] `sound-custom-import.yaml`
+- [ ] `sound-custom-playback.yaml`
+- [ ] `sound-corrupted-fallback.yaml`
+- [ ] `sound-persistence-on-edit.yaml`
 
 ---
 
-### 3.3 Database Schema Expansion
+### 3.3 Database Schema Expansion & Migration System
 **Spec:** Section 13.3 (FR #1-8)
 
-**Missing tables/columns:**
-- [ ] `reminders`: `origin_lat`, `origin_lng`, `origin_address`, `custom_sound_path`, `calendar_event_id`, `snoozed_to`
-- [ ] `anchors`: `tts_fallback BOOLEAN`, `snoozed_to`
-- [ ] `history`: `actual_arrival`, `missed_reason`
-- [ ] `destination_adjustments`: `updated_at`
-- [ ] `calendar_sync` table
-- [ ] `custom_sounds` table
-- [ ] `schema_version` tracking table
-- [ ] Migration system (sequential, versioned)
-- [ ] Enable `PRAGMA foreign_keys = ON` and `PRAGMA journal_mode = WAL`
-
-**Scenarios:**
-- [ ] `migration-sequence.yaml` (TC-01)
-- [ ] `inmemory-test-database.yaml` (TC-02)
-- [ ] `foreign-key-enforcement.yaml` (TC-04)
-- [ ] `uuid-generation.yaml` (TC-05)
-
----
-
-### 3.4 Data Retention & Archiving
-**Spec:** Section 11.3 (FR #7)
+**Current Schema Gaps:**
+| Table | Missing Columns |
+|-------|----------------|
+| reminders | origin_lat, origin_lng, origin_address, custom_sound_path, calendar_event_id, snoozed_at |
+| anchors | tts_fallback, snoozed_to |
+| history | actual_arrival, missed_reason |
+| destination_adjustments | updated_at |
+| - | Missing: calendar_sync table |
+| - | Missing: custom_sounds table |
+| - | Missing: schema_version table |
 
 **Tasks:**
-- [ ] 90-day history retention policy
-- [ ] Data archiving for history > 90 days
-- [ ] Archive access functionality
+- [ ] Create migration system (versioned, sequential)
+- [ ] Add all missing columns via migrations
+- [ ] Create calendar_sync table
+- [ ] Create custom_sounds table
+- [ ] Enable `PRAGMA foreign_keys = ON`
+- [ ] Enable `PRAGMA journal_mode = WAL`
+- [ ] UUID v4 generation verification
+
+**Scenarios to create:**
+- [ ] `migration-sequence.yaml`
+- [ ] `inmemory-test-database.yaml`
+- [ ] `foreign-key-enforcement.yaml`
+- [ ] `uuid-generation.yaml`
 
 ---
 
-## Task Dependencies Graph
+## Task Dependencies
 
 ```
-Phase 1.1 (Chain Engine)
-    └── Phase 1.4 (Snooze & Dismissal)
-
-Phase 1.1 + Phase 1.2 + Phase 1.3
+Phase 1.1 (Chain Engine - get_next_unfired_anchor)
     └── Phase 1.4 (Snooze & Dismissal)
 
 Phase 1.4 (Snooze & Dismissal)
     └── Phase 1.5 (Feedback Loop)
 
+Phase 1.2 (LLM Adapter) + Phase 1.3 (TTS Adapter)
+    └── Phase 1.4 (Snooze & Dismissal)
+
 Phase 3.3 (Database Schema)
     ├── Phase 1.1 (Chain Engine)
+    ├── Phase 1.4 (Snooze)
     ├── Phase 2.4 (Calendar Integration)
     └── Phase 3.2 (Sound Library)
 
 Phase 2.1 (Background Scheduling)
     ├── Phase 2.2 (Notification Behavior)
     └── Phase 2.3 (Location Awareness)
-
-Phase 1.5 (Feedback Loop)
-    └── Phase 3.1 (Voice Enhancements)
 ```
 
 ---
 
 ## Priority Order Summary
 
-| # | Phase | Priority | Tasks |
-|---|-------|----------|-------|
-| 1 | 1.1 Chain Engine | HIGH | 5 |
-| 2 | 1.2 LLM Adapter | HIGH | 6 |
-| 3 | 1.3 TTS Adapter | HIGH | 7 |
-| 4 | 1.4 Snooze & Dismissal | HIGH | 7 |
-| 5 | 1.5 Feedback Loop | HIGH | 7 |
-| 6 | 3.3 Database Schema | MEDIUM | 8 |
-| 7 | 2.1 Background Scheduling | MEDIUM | 4 |
-| 8 | 2.2 Notification Behavior | MEDIUM | 6 |
-| 9 | 2.3 Location Awareness | MEDIUM | 6 |
-| 10 | 2.4 Calendar Integration | MEDIUM | 8 |
-| 11 | 3.1 Voice Enhancements | LOW | 4 |
-| 12 | 3.2 Sound Library | LOW | 5 |
-| 13 | 3.4 Data Retention | LOW | 3 |
+| # | Phase | Priority | Tasks | Dependencies |
+|---|-------|----------|-------|--------------|
+| 1 | 1.1 Chain Engine | HIGH | 4 | None |
+| 2 | 1.2 LLM Adapter | HIGH | 6 | None |
+| 3 | 1.3 TTS Adapter | HIGH | 7 | None |
+| 4 | 1.4 Snooze & Dismissal | HIGH | 7 | 1.1 |
+| 5 | 1.5 Feedback Loop | HIGH | 7 | 1.4 |
+| 6 | 3.3 Database Schema | MEDIUM | 7 | None |
+| 7 | 2.1 Background Scheduling | MEDIUM | 6 | None |
+| 8 | 2.2 Notification Behavior | MEDIUM | 6 | 2.1 |
+| 9 | 2.3 Location Awareness | MEDIUM | 6 | 2.1 |
+| 10 | 2.4 Calendar Integration | MEDIUM | 8 | 3.3 |
+| 11 | 3.1 Voice Enhancements | LOW | 4 | None |
+| 12 | 3.2 Sound Library | LOW | 5 | 3.3 |
 
-**Total: ~83 tasks across 13 phases**
+**Total: ~73 tasks across 12 phases**
 
 ---
 
-## Missing Scenarios (40+)
+## Missing Test Scenarios (to create in harness)
 
-### Chain Engine (2 remaining)
-- [ ] `chain-next-unfired-anchor.yaml` (TC-05)
-- [ ] `chain-determinism.yaml` (TC-06)
+### Chain Engine (2)
+- [ ] `chain-next-unfired-anchor.yaml`
+- [ ] `chain-determinism.yaml`
 
-### Parser (4 remaining)
-- [ ] `parse-llm-fallback-keyword.yaml` (TC-04)
-- [ ] `parse-manual-field-correction.yaml` (TC-05)
-- [ ] `parse-unintelligible-rejection.yaml` (TC-06)
-- [ ] `parse-mock-adapter-test.yaml` (TC-07)
+### Parser (4)
+- [ ] `parse-llm-success.yaml`
+- [ ] `parse-llm-fallback-keyword.yaml`
+- [ ] `parse-unintelligible-rejection.yaml`
+- [ ] `parse-mock-adapter-test.yaml`
 
-### TTS (5 remaining)
-- [ ] `tts-clip-generation-at-creation.yaml` (TC-01)
-- [ ] `tts-anchor-fires-from-cache.yaml` (TC-02)
-- [ ] `tts-fallback-on-api-failure.yaml` (TC-03)
-- [ ] `tts-cache-cleanup-on-delete.yaml` (TC-04)
-- [ ] `tts-mock-in-tests.yaml` (TC-05)
+### TTS (4)
+- [ ] `tts-clip-generation-at-creation.yaml`
+- [ ] `tts-anchor-fires-from-cache.yaml`
+- [ ] `tts-fallback-on-api-failure.yaml`
+- [ ] `tts-cache-cleanup-on-delete.yaml`
 
-### Snooze & Dismissal (6 remaining)
-- [ ] `snooze-tap-1min.yaml` (TC-01)
-- [ ] `snooze-custom-duration.yaml` (TC-02)
-- [ ] `snooze-chain-recompute.yaml` (TC-03)
-- [ ] `dismissal-feedback-timing-correct.yaml` (TC-04)
-- [ ] `dismissal-feedback-left-too-late.yaml` (TC-05)
-- [ ] `snooze-persistence-after-restart.yaml` (TC-06)
+### Snooze (6)
+- [ ] `snooze-tap-1min.yaml`
+- [ ] `snooze-custom-duration.yaml`
+- [ ] `snooze-chain-recompute.yaml`
+- [ ] `dismissal-feedback-timing-correct.yaml`
+- [ ] `dismissal-feedback-left-too-late.yaml`
+- [ ] `snooze-persistence-after-restart.yaml`
 
-### Feedback Loop (5 remaining)
-- [ ] `destination-adjustment-calculation.yaml` (TC-02)
-- [ ] `destination-adjustment-cap.yaml` (TC-03)
-- [ ] `common-miss-window.yaml` (TC-04)
-- [ ] `streak-increment.yaml` (TC-05)
-- [ ] `streak-reset.yaml` (TC-06)
+### Feedback Loop (5)
+- [ ] `destination-adjustment-calculation.yaml`
+- [ ] `destination-adjustment-cap.yaml`
+- [ ] `common-miss-window.yaml`
+- [ ] `streak-increment.yaml`
+- [ ] `streak-reset.yaml`
 
-### Background Scheduling (4 remaining)
-- [ ] `background-anchor-scheduling.yaml` (TC-01)
-- [ ] `background-recovery-scan.yaml` (TC-03, TC-04)
-- [ ] `background-pending-reregister.yaml` (TC-05)
-- [ ] `background-late-fire-warning.yaml` (TC-06)
+### Background Scheduling (4)
+- [ ] `background-anchor-scheduling.yaml`
+- [ ] `background-recovery-scan.yaml`
+- [ ] `background-pending-reregister.yaml`
+- [ ] `background-late-fire-warning.yaml`
 
-### Notification Behavior (6 remaining)
-- [ ] `dnd-early-anchor-suppressed.yaml` (TC-01)
-- [ ] `dnd-final-5min-override.yaml` (TC-02)
-- [ ] `quiet-hours-suppression.yaml` (TC-03)
-- [ ] `overdue-anchor-drop-15min.yaml` (TC-04)
-- [ ] `chain-overlap-serialization.yaml` (TC-05)
-- [ ] `t0-alarm-loops.yaml` (TC-06)
+### Notification Behavior (6)
+- [ ] `dnd-early-anchor-suppressed.yaml`
+- [ ] `dnd-final-5min-override.yaml`
+- [ ] `quiet-hours-suppression.yaml`
+- [ ] `overdue-anchor-drop-15min.yaml`
+- [ ] `chain-overlap-serialization.yaml`
+- [ ] `t0-alarm-loops.yaml`
 
-### Location (5 remaining)
-- [ ] `location-still-at-origin.yaml` (TC-01)
-- [ ] `location-already-left.yaml` (TC-02)
-- [ ] `location-permission-request.yaml` (TC-03)
-- [ ] `location-permission-denied.yaml` (TC-04)
-- [ ] `location-single-check-only.yaml` (TC-05)
+### Location (5)
+- [ ] `location-still-at-origin.yaml`
+- [ ] `location-already-left.yaml`
+- [ ] `location-permission-request.yaml`
+- [ ] `location-permission-denied.yaml`
+- [ ] `location-single-check-only.yaml`
 
-### Calendar (6 remaining)
-- [ ] `calendar-apple-event-suggestion.yaml` (TC-01)
-- [ ] `calendar-google-event-suggestion.yaml` (TC-02)
-- [ ] `calendar-suggestion-to-reminder.yaml` (TC-03)
-- [ ] `calendar-permission-denial.yaml` (TC-04)
-- [ ] `calendar-sync-failure-degradation.yaml` (TC-05)
-- [ ] `calendar-recurring-event.yaml` (TC-06)
+### Calendar (6)
+- [ ] `calendar-apple-event-suggestion.yaml`
+- [ ] `calendar-google-event-suggestion.yaml`
+- [ ] `calendar-suggestion-to-reminder.yaml`
+- [ ] `calendar-permission-denial.yaml`
+- [ ] `calendar-sync-failure-degradation.yaml`
+- [ ] `calendar-recurring-event.yaml`
 
-### Database (4 remaining)
-- [ ] `migration-sequence.yaml` (TC-01)
-- [ ] `inmemory-test-database.yaml` (TC-02)
-- [ ] `foreign-key-enforcement.yaml` (TC-04)
-- [ ] `uuid-generation.yaml` (TC-05)
+### Database (4)
+- [ ] `migration-sequence.yaml`
+- [ ] `inmemory-test-database.yaml`
+- [ ] `foreign-key-enforcement.yaml`
+- [ ] `uuid-generation.yaml`
 
-### Sound Library (5 remaining)
-- [ ] `sound-builtin-playback.yaml` (TC-01)
-- [ ] `sound-custom-import.yaml` (TC-02)
-- [ ] `sound-custom-playback.yaml` (TC-03)
-- [ ] `sound-corrupted-fallback.yaml` (TC-04)
-- [ ] `sound-persistence-on-edit.yaml` (TC-05)
+### Sound Library (5)
+- [ ] `sound-builtin-playback.yaml`
+- [ ] `sound-custom-import.yaml`
+- [ ] `sound-custom-playback.yaml`
+- [ ] `sound-corrupted-fallback.yaml`
+- [ ] `sound-persistence-on-edit.yaml`
 
 ---
 
