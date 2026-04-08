@@ -1,56 +1,84 @@
 # URGENT — AI Escalating Voice Alarm Implementation Plan
 
 ## Overview
-This document maps the specification requirements to implementation tasks, prioritized by dependencies. The plan assumes a React Native + Node.js backend architecture.
+This document maps the specification requirements to implementation tasks, prioritized by dependencies. The plan assumes a React Native + Python backend architecture.
 
 ## Gap Analysis Summary
 
 | Spec Section | Status | Gap |
 |-------------|--------|-----|
-| 2. Escalation Chain Engine | Partial | Missing `get_next_unfired_anchor` function, `snoozed_to` and `tts_fallback` fields in anchors, spec-level tier ordering (T-25, T-20...), unit tests |
-| 3. Reminder Parsing | Partial | Keyword parser exists in test_server.py (lines 193-296), missing LLM adapter interface (`ILanguageModelAdapter`), mock adapter, and full fallback chain |
-| 4. Voice & TTS Generation | Partial | Template messages exist (5 personalities, lines 299-350), missing TTS adapter interface, ElevenLabs integration, caching at `/tts_cache/{reminder_id}/`, message variations (3 per tier) |
-| 5. Notification & Alarm | None | DND handling, quiet hours, chain overlap serialization, notification tier sounds not implemented |
-| 6. Background Scheduling | None | Notifee, BGTaskScheduler (iOS), WorkManager (Android), recovery scan not implemented |
-| 7. Calendar Integration | None | EventKit (iOS), Google Calendar API, suggestion cards not implemented |
-| 8. Location Awareness | None | Single-point CoreLocation check, 500m geofence, escalation on "still at origin" not implemented |
-| 9. Snooze & Dismissal | Partial | Basic history recording (lines 548-587), missing tap/tap-hold/swipe interactions, chain re-computation after snooze, persistence across restarts |
-| 10. Voice Personality | Partial | 5 built-in + custom exist with 1 template per tier, missing 3+ variations per tier, custom prompt support (max 200 chars) |
-| 11. History & Stats | Partial | Basic hit rate exists (lines 370-389), missing streak counter, common miss window, feedback loop with +2min adjustment capped at +15min |
-| 12. Sound Library | None | Built-in sounds (5 per category), custom import (MP3/WAV/M4A max 30s), transcoding, fallback handling not implemented |
-| 13. Data Persistence | Partial | Basic schema in test_server.py (lines 23-87), missing versioned migrations, in-memory test mode, origin_lat/lng, calendar_event_id, custom_sounds table, destination_adjustments with proper cap logic |
+| 2. Escalation Chain Engine | Partial | Missing `get_next_unfired_anchor`, `snoozed_to`/`tts_fallback` fields, unit tests for all 6 scenarios, validation for `arrival_time > departure_time + minimum_drive` |
+| 3. Reminder Parsing | Partial | Keyword parser exists (test_server.py:193-296), missing LLM adapter interface, mock adapter for tests, system prompt-based extraction |
+| 4. Voice & TTS Generation | Partial | Templates exist (1 per tier, test_server.py:299-350), missing TTS adapter, caching at `/tts_cache/{reminder_id}/`, 3+ variations per tier |
+| 5. Notification & Alarm | None | DND handling, quiet hours (10pm-7am), chain overlap serialization, notification tier sounds, visual+vibration at T-5 |
+| 6. Background Scheduling | None | Notifee, BGTaskScheduler (iOS), WorkManager (Android), recovery scan, grace window |
+| 7. Calendar Integration | None | EventKit (iOS), Google Calendar API, suggestion cards, permission denial handling |
+| 8. Location Awareness | None | Single-point CoreLocation check, 500m geofence, escalation on "still at origin" |
+| 9. Snooze & Dismissal | Partial | History recording exists (test_server.py:548-587), missing tap/tap-hold/swipe handlers, TTS confirmation, chain re-computation after snooze |
+| 10. Voice Personality | Partial | 5 built-in + custom (1 template/tier), needs 3+ variations, custom prompt max 200 chars, existing reminders retain personality from creation time |
+| 11. History & Stats | Partial | Hit rate exists (test_server.py:370-389), missing streak counter, miss window, feedback loop with +15min cap |
+| 12. Sound Library | None | Built-in (5/category), custom import (MP3/WAV/M4A, max 30 sec), transcoding, fallback to default |
+| 13. Data Persistence | Partial | Basic schema exists (test_server.py:28-85), missing migrations, in-memory test mode, full spec schema fields |
 
 ### Current Implementation Status
 
-`src/test_server.py` (628 lines) provides a proof-of-concept with:
-- ✅ SQLite database with 5 tables (reminders, anchors, history, destination_adjustments, user_preferences) - simplified schema vs spec
-- ✅ Chain engine (`compute_escalation_chain`, lines 103-179) - basic anchor generation with buffer-based compression
-- ✅ Keyword parser (`parse_reminder_natural`, lines 193-296) - regex-based fallback extraction
-- ✅ Voice personality templates (6 personalities: coach, assistant, best_friend, no_nonsense, calm, custom, lines 299-350) - **1 template per tier**, needs 3+ variations
-- ✅ Basic hit rate calculation (`calculate_hit_rate`, lines 370-389)
-- ✅ HTTP test endpoints (8 endpoints for harness validation)
+`src/test_server.py` (628 lines) proof-of-concept:
 
-**Missing from current implementation:**
-- ❌ `get_next_unfired_anchor(reminder_id)` function for scheduler recovery (Section 2.3.6)
-- ❌ `snoozed_to` field in anchors table for snooze state
-- ❌ `tts_fallback` boolean field in anchors table
-- ❌ `tts_clip_path` is not persisted to anchors table (only stored in memory during generation)
-- ❌ Unit tests for chain engine scenarios (TC-01 through TC-06 in spec)
-- ❌ LLM adapter interface (`ILanguageModelAdapter`) - spec Section 3.3
-- ❌ Mock LLM adapter returning predefined fixtures - spec Section 3.3.3
-- ❌ TTS adapter interface (`ITTSAdapter`) - spec Section 4.3
-- ❌ Mock TTS adapter for tests (writes silent file) - spec Section 4.5.5
-- ❌ TTS cache storage at `/tts_cache/{reminder_id}/` - spec Section 4.3.4
-- ❌ Message variations (minimum 3 per tier per personality) - spec Section 10.3.6
-- ❌ Custom prompt mode (max 200 chars) - spec Section 10.3.3
-- ❌ Streak counter for recurring reminders - spec Section 11.3.4
-- ❌ Common miss window (most frequently missed tier) - spec Section 11.3.3
-- ❌ Feedback loop with cap (+15 min max) - spec Section 11.3.2
-- ❌ Chain re-computation after snooze - spec Section 9.3.3
-- ❌ Versioned database migrations - spec Section 13.3
-- ❌ In-memory test mode (`?mode=memory`) - spec Section 13.3.3
-- ❌ Full spec schema (origin_lat/lng, origin_address, calendar_event_id, custom_sounds table, etc.)
-- ❌ Snooze interaction handlers (tap, tap-and-hold, swipe)
+**✅ Implemented (verified from code):**
+- SQLite with 5 tables (reminders, anchors, history, destination_adjustments, user_preferences) - simplified schema (lines 28-85)
+- Chain engine (`compute_escalation_chain`, lines 103-179) - buffer-based compression (full/compressed/short/minimum), 8/5/3/1 anchor outputs
+- Keyword parser (`parse_reminder_natural`, lines 193-296) - regex-based extraction with fallback, confidence calculation
+- Voice personality templates (6 personalities: coach, assistant, best_friend, no_nonsense, calm, custom; lines 299-350) - **1 template per tier**, needs 3+ variations
+- Basic hit rate (`calculate_hit_rate`, lines 370-389) - 7-day trailing calculation
+- Feedback loop: destination_adjustments table + ON CONFLICT update (lines 568-582) - +2 min per miss, no cap
+- HTTP test endpoints (8 endpoints: /health, /chain, /reminders, /stats/hit-rate, /parse, /voice/message, /history, /anchors/fire)
+- Validation (`validate_chain`, lines 182-189) - departure_time in past, invalid_drive_duration
+
+**❌ Missing from implementation (verified from spec):**
+
+*Core logic:*
+- `get_next_unfired_anchor(reminder_id)` - spec Section 2.3.6
+- `snoozed_to` field in anchors table - spec Section 2.3.5
+- `tts_fallback` boolean field in anchors - spec Section 2.3.5
+- `tts_clip_path` persisted to anchors - spec Section 2.3.5
+- `calendar_event_id` field in reminders - spec Section 13.2
+- `origin_lat`, `origin_lng`, `origin_address` fields in reminders - spec Section 13.2
+- Unit tests for chain engine (TC-01 through TC-06 in spec Section 2.5)
+
+*Adapters:*
+- LLM adapter interface (`ILanguageModelAdapter`) - spec Section 3.3
+- Mock LLM adapter - spec Section 3.3.3
+- TTS adapter interface (`ITTSAdapter`) - spec Section 4.3
+- Mock TTS adapter - spec Section 4.5.5
+- TTS cache at `/tts_cache/{reminder_id}/` - spec Section 4.3.4
+
+*Voice personality:*
+- Message variations (3+ per tier) - spec Section 10.3.6
+- Custom prompt mode (max 200 chars) - spec Section 10.3.3
+
+*Stats & history:*
+- Streak counter - spec Section 11.3.4
+- Common miss window - spec Section 11.3.3
+- Feedback loop cap (+15 min) - spec Section 11.3.2
+
+*Snooze & dismissal:*
+- Tap = 1 min snooze with TTS confirmation - spec Section 9.3.1
+- Tap-and-hold = custom snooze picker - spec Section 9.3.2
+- Chain re-computation after snooze - spec Section 9.3.3
+- Swipe-to-dismiss with feedback prompt - spec Section 9.3.5
+
+*Persistence:*
+- Versioned migrations - spec Section 13.3
+- In-memory test mode (`?mode=memory`) - spec Section 13.3.3
+- custom_sounds table - spec Section 13.2
+- calendar_sync table - spec Section 13.2
+
+*Missing entire features:*
+- Background scheduling (Notifee, BGTaskScheduler, WorkManager)
+- Notification & alarm behavior (DND, quiet hours, tier sounds)
+- Calendar integration (EventKit, Google Calendar API)
+- Location awareness (CoreLocation, 500m geofence)
+- Sound library (built-in + custom import)
 
 ---
 
@@ -61,36 +89,39 @@ This document maps the specification requirements to implementation tasks, prior
 #### 1. Database Migration System
 **Spec Ref:** Section 13
 **Task:** Implement versioned SQLite migration system
-- Create migration runner that applies sequential versions
-- Implement in-memory test mode (`?mode=memory`)
-- Add all schema tables from spec with proper foreign keys
-- **Acceptance Criteria:** Fresh install applies migrations, tests use clean in-memory DB
+- Create migration runner (sequential versions: schema_v1, schema_v2, etc.)
+- Implement in-memory test mode via `?mode=memory` connection
+- Add full spec schema: origin_lat/lng, origin_address, calendar_event_id, custom_sounds table, snoozed_to, tts_fallback fields
+- Enable foreign keys and WAL mode
+- **Acceptance Criteria:** Fresh install applies migrations in order, tests use clean in-memory DB
 **Files:** `src/backend/database/migrations/*.sql`, `src/backend/database/migrator.py`
 
-#### 2. Chain Engine Unit Tests & get_next_unfired_anchor
-**Spec Ref:** Section 2.3, 2.4
-**Task:** Complete chain engine with recovery function
-- Add `get_next_unfired_anchor(reminder_id)` function
+#### 2. Chain Engine get_next_unfired_anchor + Unit Tests
+**Spec Ref:** Section 2.3, 2.4, 2.5
+**Task:** Complete chain engine with recovery and tests
+- Add `get_next_unfired_anchor(reminder_id)` function for scheduler recovery
+- Add `snoozed_to` and `tts_fallback` fields to anchors table
 - Write unit tests for all 6 test scenarios (TC-01 through TC-06)
-- Ensure determinism for identical inputs
+- Ensure determinism (same inputs → same anchors)
+- Add validation for `arrival_time > departure_time + minimum_drive`
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-#### 3. LLM Adapter Interface & Mock Implementation
-**Spec Ref:** Section 3.3, 3.4
+#### 3. LLM Adapter Interface & Mock
+**Spec Ref:** Section 3.3, 3.4, 3.5
 **Task:** Create mock-able LLM adapter for parsing
 - Define `ILanguageModelAdapter` interface
-- Implement MiniMax API adapter (configurable endpoint)
-- Create mock adapter for tests returning predefined fixtures
-- Implement keyword extraction fallback
-- **Acceptance Criteria:** Mock returns fixture without API call, fallback works on API failure
+- Implement MiniMax API adapter (configurable via env var)
+- Create mock adapter for tests (returns predefined fixtures)
+- Keyword extraction fallback already in `test_server.py` (lines 193-296) - integrate
+- **Acceptance Criteria:** Mock returns fixture without API call, fallback on API failure
 **Files:** `src/backend/adapters/llm_adapter.py`, `src/backend/adapters/mock_llm.py`
 
 #### 4. Reminder Parser Integration
-**Spec Ref:** Section 3.3, 3.4
-**Task:** Connect LLM adapter to reminder creation flow
-- Parse natural language input via LLM
-- Display parsed interpretation for user confirmation
+**Spec Ref:** Section 3.3, 3.4, 3.5
+**Task:** Connect parser to reminder creation flow
+- Parse natural language input via LLM or fallback
+- Display parsed interpretation (confirmation card)
 - Allow manual field correction before confirm
 - Extract: destination, arrival_time, drive_duration, reminder_type
 - **Acceptance Criteria:** All 7 test scenarios pass (TC-01 through TC-07)
