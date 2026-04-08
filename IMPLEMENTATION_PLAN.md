@@ -6,24 +6,59 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 
 ## Gap Analysis Summary
 
-**Current State:** `src/test_server.py` is a basic Python HTTP test server with minimal implementations of:
-- Simple chain computation (partial)
-- Keyword-based reminder parsing
-- Template-based voice messages
-- Basic SQLite schema
+**Current State:** `src/test_server.py` is a basic Python HTTP test server with partial implementations of:
+- Chain computation with **bugs** in compressed/minimum chains (wrong timestamps)
+- Keyword-based reminder parsing (limited patterns, no confidence scoring)
+- Voice personality templates (5 personalities, but NO variations)
+- Basic SQLite schema (missing 5+ fields from spec)
+- Basic hit rate calculation (incomplete)
 
-**Not Yet Implemented (per spec):** All core systems below.
+**Bugs Found:**
+1. Compressed chain (10-24 min buffer): timestamps off by 5 min
+2. Minimum chain (< 5 min): incorrect tier assignments
+3. Missing `get_next_unfired_anchor()` function
+4. Missing `snoozed_to` field in anchors table
+
+**Not Yet Implemented:**
+- All adapter interfaces (ILanguageModel, ITTS, ICalendar)
+- TTS cache manager and ElevenLabs integration
+- Notification & alarm behavior system
+- Background scheduling (Notifee)
+- Snooze/dismissal flow with chain re-computation
+- History stats with feedback loop
+- Calendar and location integration
+- Sound library
+- Test harness infrastructure
 
 ---
 
-## Priority 1: Foundation (Must Have First)
+## Priority 1: Critical Bug Fixes (Must Fix First)
 
-### 1.1 [ ] Complete Data Persistence Layer
+### 1.1 [x] Chain Engine Bug Fixes
+**Status:** BUGS FOUND - Existing chain computation has wrong timestamps.
+
+**Bugs Identified:**
+1. **Compressed chain (10-24 min buffer):** Uses `drive_duration - 5` which puts urgent at T-10 instead of T-15
+2. **Minimum chain (< 5 min):** Logic doesn't match spec TC-03 (3 anchors: T-3, T-1, T-0)
+
+**Fix Tasks:**
+- [ ] Fix compressed chain: urgent should be `drive_duration - 15` (T-15), not T-10
+- [ ] Fix minimum chain for 3-min buffer: should produce 3 anchors at T-3, T-1, T-0
+- [ ] Add `get_next_unfired_anchor(reminder_id)` function
+- [ ] Add `snoozed_to` field to anchor computation
+
+**Code Location:** `src/test_server.py` → `compute_escalation_chain()`
+
+**Dependencies:** None (immediate fix)
+
+---
+
+### 1.2 [ ] Complete Data Persistence Layer
 **Why first:** All other systems depend on SQLite storage.
 
 **Tasks:**
-- [ ] Implement full schema from spec Section 13.3 (`reminders`, `anchors`, `history`, `user_preferences`, `destination_adjustments`, `calendar_sync`, `custom_sounds`)
 - [ ] Add missing reminder fields: `custom_sound_path`, `origin_lat`, `origin_lng`, `origin_address`, `calendar_event_id`
+- [ ] Add missing tables: `calendar_sync`, `custom_sounds`
 - [ ] Enable WAL mode (`PRAGMA journal_mode = WAL`)
 - [ ] Enable foreign key enforcement (`PRAGMA foreign_keys = ON`)
 - [ ] Implement sequential migration system (start at schema_v1)
@@ -31,26 +66,6 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 - [ ] ISO 8601 timestamp handling (UTC storage, local display)
 
 **Dependencies:** None
-
----
-
-### 1.2 [ ] Complete Escalation Chain Engine
-**Why first:** Core app logic; all reminders need anchors.
-
-**Tasks:**
-- [ ] Implement `compute_escalation_chain(arrival_time, drive_duration)` matching spec rules:
-  - buffer ≥ 25 min: 8 anchors (full)
-  - buffer 20-24 min: 7 anchors (skip calm)
-  - buffer 10-19 min: 5 anchors (start at urgent)
-  - buffer 5-9 min: 3 anchors (firm, critical, alarm)
-  - buffer 1-4 min: 2 anchors (firm, alarm)
-- [ ] Implement `get_next_unfired_anchor(reminder_id)` for scheduler recovery
-- [ ] Add validation: `arrival_time > departure_time + minimum_drive_time`
-- [ ] Ensure deterministic output for unit testing
-- [ ] Store anchor records with: `id`, `reminder_id`, `timestamp`, `urgency_tier`, `tts_clip_path`, `tts_fallback`, `fired`, `fire_count`, `snoozed_to`
-- [ ] Implement `get_anchors_sorted_by_timestamp(reminder_id)`
-
-**Dependencies:** 1.1 Data Persistence
 
 ---
 
@@ -70,13 +85,27 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 - [ ] Return `confidence_score` from keyword fallback
 - [ ] Reject unintelligible input with user-facing error
 
-**Dependencies:** 1.1 Data Persistence
+**Dependencies:** 1.2 Data Persistence
 
 ---
 
 ## Priority 2: Core Features (User-Facing)
 
-### 2.1 [ ] Voice & TTS Generation System
+### 2.1 [ ] Voice Personality System with Variations
+**Why second:** Currently has NO message variations.
+
+**Tasks:**
+- [ ] Generate 3+ message variations per tier per personality
+- [ ] Implement Custom mode: user prompt (max 200 chars) appended to generation
+- [ ] Store selected personality in `user_preferences`
+- [ ] Message templates must include: `{dest}`, `{dur}`, `{remaining}`, `{plural}`
+- [ ] `generate_voice_message()` function for TTS adapter
+
+**Dependencies:** None (foundational)
+
+---
+
+### 2.2 [ ] Voice & TTS Generation System
 **Why second:** Pre-generated clips eliminate runtime latency.
 
 **Tasks:**
@@ -94,23 +123,7 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 - [ ] Fallback behavior: system notification sound + text body if TTS fails
 - [ ] Generate clips at reminder creation only
 
-**Dependencies:** 1.1 Data Persistence, 2.3 Voice Personality System
-
----
-
-### 2.2 [ ] Voice Personality System
-**Why concurrent with TTS:** Personality defines message generation.
-
-**Tasks:**
-- [ ] Implement 5 built-in personalities: Coach, Assistant, Best Friend, No-nonsense, Calm
-- [ ] Define per-personality: `voice_id`, `system_prompt` fragment, tier templates
-- [ ] Implement Custom mode: user prompt (max 200 chars) appended to generation
-- [ ] Store selected personality in `user_preferences`
-- [ ] Generate 3+ message variations per tier per personality
-- [ ] Message templates must include: `{dest}`, `{dur}`, `{remaining}`, `{plural}`
-- [ ] `generate_voice_message()` function for TTS adapter
-
-**Dependencies:** None (foundational)
+**Dependencies:** 1.2 Data Persistence, 2.1 Voice Personality System
 
 ---
 
@@ -127,7 +140,7 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 - [ ] Show progress indicator during TTS generation
 - [ ] Handle reminder types: `countdown_event`, `simple_countdown`, `morning_routine`, `standing_recurring`
 
-**Dependencies:** 1.3 LLM Adapter, 2.1 TTS System
+**Dependencies:** 1.3 LLM Adapter, 2.2 TTS System
 
 ---
 
@@ -149,7 +162,7 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 - [ ] Implement T-0 alarm loop (until dismiss/snooze)
 - [ ] Notification display: destination, time remaining, personality icon
 
-**Dependencies:** 2.1 TTS System, 2.2 Voice System
+**Dependencies:** 2.2 TTS System, 2.1 Voice System
 
 ---
 
@@ -169,7 +182,7 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 - [ ] TTS confirmation for all snooze actions
 - [ ] Persist snooze state for app restart recovery
 
-**Dependencies:** 2.4 Notification System, 1.1 Data Persistence
+**Dependencies:** 2.4 Notification System, 1.2 Data Persistence
 
 ---
 
@@ -185,7 +198,7 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 - [ ] Archive data older than 90 days (accessible, not deleted)
 - [ ] Stats derived entirely from history table (no separate store)
 
-**Dependencies:** 2.5 Snooze Flow, 1.1 Data Persistence
+**Dependencies:** 2.5 Snooze Flow, 1.2 Data Persistence
 
 ---
 
@@ -206,7 +219,7 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 - [ ] Log warning if anchor fires >60s after scheduled time
 - [ ] Persist all anchor state to SQLite (survives termination)
 
-**Dependencies:** 1.2 Chain Engine, 2.4 Notification System
+**Dependencies:** 1.1 Chain Engine, 2.4 Notification System
 
 ---
 
@@ -261,14 +274,30 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 - [ ] Corrupted/missing file: fallback to category default, log error
 - [ ] Sound selection persists on reminder edit
 
-**Dependencies:** 1.1 Data Persistence
+**Dependencies:** 1.2 Data Persistence
 
 ---
 
 ## Priority 4: Testing & Quality
 
-### 4.1 [ ] Unit Test Suite
-**Why concurrent:** Ensure correctness as we build.
+### 4.1 [ ] Test Harness Infrastructure
+**Why concurrent:** The `harness/` directory is empty; scenarios exist but can't run.
+
+**Tasks:**
+- [ ] Create `harness/scenario_harness.py` - main test runner
+- [ ] Implement scenario loader from YAML files
+- [ ] Implement HTTP client for API calls
+- [ ] Implement SQLite assertions for DB verification
+- [ ] Implement LLM judge assertions (uses sonnet-4-20250514)
+- [ ] Support `OTTO_SCENARIO_DIR` environment variable
+- [ ] Support `--project` CLI flag
+
+**Dependencies:** None
+
+---
+
+### 4.2 [ ] Unit Test Suite
+**Why second:** Ensure correctness as we build.
 
 **Tasks:**
 - [ ] Test escalation chain (TC-01 through TC-06 from spec)
@@ -284,7 +313,7 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 
 ---
 
-### 4.2 [ ] Integration Tests
+### 4.3 [ ] Integration Tests
 **Why last:** Validate end-to-end flows.
 
 **Tasks:**
@@ -295,20 +324,22 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 - [ ] Test calendar sync → suggestion → reminder creation
 - [ ] Test location check → immediate escalation flow
 
-**Dependencies:** 3.1, 3.2, 3.3, 4.1
+**Dependencies:** 3.1, 3.2, 3.3, 4.2
 
 ---
 
 ## Implementation Order Summary
 
 ```
+Phase 0: Critical Fixes (Do First!)
+  1.1 Chain Engine Bug Fixes (timestamp corrections)
+
 Phase 1: Foundation
-  1.1 Data Persistence Layer
-  1.2 Escalation Chain Engine
+  1.2 Data Persistence Layer (complete schema)
   1.3 LLM Adapter & Parser
 
 Phase 2: Core Features
-  2.1 Voice Personality System (parallel with TTS)
+  2.1 Voice Personality System (add variations)
   2.2 Voice & TTS Generation
   2.3 Reminder Quick Add Flow
   2.4 Notification & Alarm Behavior
@@ -322,9 +353,49 @@ Phase 3: Platform Integration
   3.4 Sound Library
 
 Phase 4: Testing
-  4.1 Unit Test Suite
-  4.2 Integration Tests
+  4.1 Test Harness Infrastructure
+  4.2 Unit Test Suite
+  4.3 Integration Tests
 ```
+
+## Scenario Files Coverage
+
+| Scenario | Spec Section | Current Status |
+|----------|-------------|----------------|
+| `chain-full-30min.yaml` | 2, TC-01 | ⚠️ Partial (code exists, has bugs) |
+| `chain-compressed-15min.yaml` | 2, TC-02 | ❌ BUGGY (wrong timestamps) |
+| `chain-minimum-3min.yaml` | 2, TC-03 | ❌ BUGGY (wrong tiers) |
+| `chain-invalid-rejected.yaml` | 2, TC-04 | ✅ Works |
+| `parse-natural-language.yaml` | 3, TC-01 | ⚠️ Partial (basic patterns) |
+| `parse-simple-countdown.yaml` | 3, TC-02 | ⚠️ Partial |
+| `parse-tomorrow.yaml` | 3, TC-03 | ⚠️ Partial |
+| `voice-coach-personality.yaml` | 10, TC-01 | ❌ NO VARIATIONS |
+| `voice-no-nonsense.yaml` | 10, TC-02 | ❌ NO VARIATIONS |
+| `voice-all-personalities.yaml` | 10 | ❌ NO VARIATIONS |
+| `history-record-outcome.yaml` | 11 | ✅ Works |
+| `history-record-miss-feedback.yaml` | 11, TC-05 | ✅ Works |
+| `stats-hit-rate.yaml` | 11, TC-01 | ⚠️ Partial |
+| `reminder-creation-crud.yaml` | 13 | ✅ Works |
+| `reminder-creation-cascade-delete.yaml` | 13, TC-03 | ⚠️ Partial (no cascade) |
+| `chain-20-24min-buffer.yaml` | 2 | ❌ Missing |
+| `parse-api-failure-fallback.yaml` | 3, TC-04 | ❌ Missing |
+| `parse-manual-correction.yaml` | 3, TC-05 | ❌ Missing |
+| `parse-unintelligible.yaml` | 3, TC-06 | ❌ Missing |
+| `tts-fallback-on-error.yaml` | 4, TC-03 | ❌ Missing |
+| `snooze-chain-recomputation.yaml` | 9, TC-03 | ❌ Missing |
+| `feedback-loop-adjustment.yaml` | 11, TC-02 | ❌ Missing |
+| `feedback-loop-cap.yaml` | 11, TC-03 | ❌ Missing |
+| `common-miss-window.yaml` | 11, TC-04 | ❌ Missing |
+| `streak-increment.yaml` | 11, TC-05 | ❌ Missing |
+| `streak-reset.yaml` | 11, TC-06 | ❌ Missing |
+| `quiet-hours.yaml` | 5, TC-03 | ❌ Missing |
+| `dnd-final-5min-override.yaml` | 5, TC-02 | ❌ Missing |
+| `overdue-anchor-drop.yaml` | 5, TC-04 | ❌ Missing |
+| `chain-overlap-serialization.yaml` | 5, TC-05 | ❌ Missing |
+| `recovery-scan.yaml` | 6, TC-03 | ❌ Missing |
+| `pending-anchors-reregister.yaml` | 6, TC-05 | ❌ Missing |
+
+**Legend:** ✅ Works | ⚠️ Partial/Buggy | ❌ Missing
 
 ## Out of Scope (Per Spec)
 
@@ -345,12 +416,40 @@ Phase 4: Testing
 ## Verification Commands
 
 ```bash
-# Validate test server
+# Validate test server (syntax check)
 python3 -m py_compile src/test_server.py
 
-# Run unit tests (when implemented)
+# Start test server
+python3 src/test_server.py &
+
+# Run unit tests (when harness is implemented)
 python3 -m pytest harness/
 
 # Manual harness test
-sudo python3 harness/scenario_harness.py --project otto-matic
+sudo python3 harness/scenario_harness.py --project urgent-alarm
+
+# Test specific scenario directory
+OTTO_SCENARIO_DIR=./scenarios python3 harness/scenario_harness.py --project urgent-alarm
 ```
+
+## Quick Fix Checklist
+
+Before moving to new features, verify these work:
+
+- [ ] **Chain full (30min):** `GET /chain?arrival=2026-04-09T09:00:00&duration=30` returns 8 anchors
+- [ ] **Chain compressed (15min):** Timestamps should be 8:45, 8:50, 8:55, 8:59, 9:00
+- [ ] **Chain minimum (3min):** Should produce 3 anchors at T-3, T-1, T-0
+- [ ] **Invalid chain:** `POST /reminders` with drive_duration=120 returns 400
+- [ ] **Parse NL:** `POST /parse` extracts destination, arrival_time, drive_duration
+- [ ] **Voice messages:** All 5 personalities generate appropriate messages
+- [ ] **Stats:** Hit rate calculation is correct
+
+## Key Files to Modify
+
+| File | Purpose | Change Type |
+|------|---------|-------------|
+| `src/test_server.py` | Main HTTP API server | Bug fixes + features |
+| `src/test_server.py` | `compute_escalation_chain()` | Fix timestamps |
+| `src/test_server.py` | Database schema | Add missing tables/fields |
+| `harness/scenario_harness.py` | Test runner | New file |
+| `scenarios/*.yaml` | Validation tests | Add missing scenarios |
