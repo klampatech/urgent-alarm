@@ -4,7 +4,29 @@
 
 The current codebase contains a basic HTTP test server (`src/test_server.py`) with partial implementations of core systems. The specification defines 13 major systems. **Critical bugs found in chain engine** that must be fixed before proceeding.
 
-**Current State (as of 2026-04-08):**
+**Gap Analysis Date:** 2026-04-08
+
+**Analyzed By:** pi-coding-agent
+
+---
+
+## Executive Summary
+
+After thorough analysis of `specs/*.md` vs `src/*`:
+
+| Category | Status | Gap Count |
+|----------|--------|-----------|
+| Core Logic | ⚠️ Partial | 1 critical bug, 2 incomplete |
+| Adapters (LLM/TTS) | ❌ Missing | 2 not implemented |
+| Infrastructure | ⚠️ Partial | 1 incomplete, 1 missing |
+| Mobile Features | ❌ Missing | 5 not implemented |
+| Test Infrastructure | ❌ Missing | 1 blocking item |
+
+**Critical Path:** Chain engine bugs → Test harness → Database schema → Remaining features
+
+---
+
+## Current State (as of 2026-04-08):
 | Component | Location | Status | Notes |
 |-----------|----------|--------|-------|
 | HTTP Test Server | `src/test_server.py` | ~627 lines, 11 functions | Partial - has bugs |
@@ -678,6 +700,136 @@ DAY 4+:
 - Without `scenario_harness.py`, there is NO WAY to run the 15 validation scenarios
 - Otto loop cannot validate any work without harness
 - Otto loop depends on `/tmp/ralph-scenario-result.json` written by harness
+
+---
+
+## Verification: Chain Engine Bugs Confirmed
+
+Run this Python to verify bugs:
+```python
+from datetime import datetime, timedelta
+# (use compute_escalation_chain from test_server.py)
+arrival = datetime(2026, 4, 9, 9, 0, 0)
+```
+
+**Actual output vs expected:**
+
+| Buffer | Expected | Actual | Status |
+|--------|----------|--------|--------|
+| 30 min | 8 anchors, T-30...T-0 | 8 anchors ✓ | Working |
+| 10 min | 4 anchors: T-10, T-5, T-1, T-0 | 4 anchors but WRONG times (urgent@T-5, pushing@T-0, critical@T-9) | ❌ BROKEN |
+| 3 min | 3 anchors: T-2, T-1, T-0 | 2 anchors only (missing critical) | ❌ BROKEN |
+| 6 min | 3 anchors, no duplicates | 3 anchors but DUPLICATE T-5 timestamps | ❌ BROKEN |
+
+---
+
+## Detailed Gap Analysis
+
+### Database Schema Gaps (vs Spec Section 13)
+| Table | Column | Status |
+|-------|--------|--------|
+| reminders | origin_lat, origin_lng | ❌ Missing |
+| reminders | origin_address | ❌ Missing |
+| reminders | calendar_event_id | ❌ Missing |
+| reminders | custom_sound_path | ❌ Missing |
+| anchors | tts_fallback | ❌ Missing |
+| anchors | snoozed_to | ❌ Missing |
+| history | actual_arrival | ❌ Missing |
+| history | missed_reason | ❌ Missing |
+| user_preferences | updated_at | ❌ Missing |
+| destination_adjustments | updated_at | ❌ Missing |
+| **calendar_sync** | table | ❌ Missing |
+| **custom_sounds** | table | ❌ Missing |
+| All | WAL mode | ❌ Not enabled |
+| All | FK enforcement | ❌ Not enabled |
+
+### Parser Gaps (vs Spec Section 3)
+| Feature | Status |
+|---------|--------|
+| ILanguageModelAdapter interface | ❌ Missing |
+| MiniMax API adapter | ❌ Missing |
+| Anthropic API adapter | ❌ Missing |
+| MockLanguageModelAdapter | ❌ Missing |
+| Keyword extraction for all formats | ⚠️ Partial |
+| Confidence scoring | ⚠️ Partial |
+| reminder_type enum detection | ❌ Missing |
+| User confirmation flow | ❌ Missing |
+
+### TTS Gaps (vs Spec Section 4)
+| Feature | Status |
+|---------|--------|
+| ITTSAdapter interface | ❌ Missing |
+| ElevenLabs adapter | ❌ Missing |
+| MockTTSAdapter | ❌ Missing |
+| TTS cache management | ❌ Missing |
+| Cache invalidation on delete | ❌ Missing |
+| Fallback on API failure | ❌ Missing |
+
+### Notification Gaps (vs Spec Section 5)
+| Feature | Status |
+|---------|--------|
+| Sound tier escalation | ❌ Missing |
+| DND awareness | ❌ Missing |
+| Quiet hours | ❌ Missing |
+| Chain overlap serialization | ❌ Missing |
+| T-0 alarm looping | ❌ Missing |
+
+### Background Scheduling Gaps (vs Spec Section 6)
+| Feature | Status |
+|---------|--------|
+| Notifee/WorkManager | ❌ Missing |
+| Recovery scan | ❌ Missing |
+| Grace window (15 min) | ❌ Missing |
+| Late fire logging | ❌ Missing |
+
+### Calendar Integration Gaps (vs Spec Section 7)
+| Feature | Status |
+|---------|--------|
+| ICalendarAdapter interface | ❌ Missing |
+| Apple Calendar adapter | ❌ Missing |
+| Google Calendar adapter | ❌ Missing |
+| Calendar sync logic | ❌ Missing |
+| Suggestion cards | ❌ Missing |
+
+### Location Gaps (vs Spec Section 8)
+| Feature | Status |
+|---------|--------|
+| LocationService interface | ❌ Missing |
+| Geofence comparison (500m) | ❌ Missing |
+| Origin capture at creation | ❌ Missing |
+
+### Snooze Gaps (vs Spec Section 9)
+| Feature | Status |
+|---------|--------|
+| Tap snooze (1 min) | ❌ Missing |
+| Custom snooze picker | ❌ Missing |
+| Chain re-computation | ❌ Missing |
+| Feedback prompt | ❌ Missing |
+| TTS confirmation | ❌ Missing |
+
+### Voice Personality Gaps (vs Spec Section 10)
+| Feature | Status |
+|---------|--------|
+| 3+ variations per tier | ❌ Missing (only 1) |
+| Custom prompt mode | ❌ Missing |
+| ElevenLabs voice mapping | ❌ Missing |
+
+### Stats Gaps (vs Spec Section 11)
+| Feature | Status |
+|---------|--------|
+| Hit rate calculation | ⚠️ Partial |
+| Feedback loop (adjustment) | ❌ Missing |
+| Common miss window | ❌ Missing |
+| Streak counter | ❌ Missing |
+| 90-day retention | ❌ Missing |
+
+### Sound Library Gaps (vs Spec Section 12)
+| Feature | Status |
+|---------|--------|
+| Sound library structure | ❌ Missing |
+| Built-in sounds (15 total) | ❌ Missing |
+| Custom import | ❌ Missing |
+| Corrupted file fallback | ❌ Missing |
 
 ---
 
