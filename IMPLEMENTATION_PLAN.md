@@ -4,7 +4,7 @@
 
 The Urgent Voice Alarm app helps users make time-sensitive appointments by providing adaptive escalation chains with AI-generated voice nudges. The system computes a timeline from departure to arrival and speaks with escalating urgency as the deadline approaches.
 
-**Current State:** A Python test server (`src/test_server.py`) exists with partial implementations of chain engine, parser, and voice templates. Scenario files exist in `scenarios/`. The harness infrastructure (`harness/scenario_harness.py`) does NOT exist yet.
+**Current State:** A Python test server (`src/test_server.py`) exists with partial implementations of chain engine, parser, and voice templates. 16 scenario files exist in `scenarios/`. The harness infrastructure (`harness/`) is EMPTY - no harness code exists yet.
 
 ---
 
@@ -12,20 +12,56 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 
 | Spec Section | Feature | Code Status | Test Scenarios |
 |--------------|---------|-------------|----------------|
-| 13 | Data Persistence (SQLite schema) | ⚠️ Partial | 2 scenarios |
-| 2 | Escalation Chain Engine | ⚠️ Partial (bugs) | 4 scenarios |
-| 3 | Reminder Parsing | ⚠️ Partial | 3 scenarios |
-| 10 | Voice Personality | ⚠️ Partial (no variations) | 3 scenarios |
-| 11 | History & Stats | ⚠️ Partial | 3 scenarios |
-| 4 | Voice & TTS Generation | ❌ Missing | 0 scenarios |
+| 2 | Escalation Chain Engine | ⚠️ Partial (bugs in compressed logic) | 4 scenarios |
+| 3 | Reminder Parsing | ⚠️ Partial (basic keyword extraction) | 3 scenarios |
+| 10 | Voice Personality | ⚠️ Partial (basic templates, no variations) | 3 scenarios |
+| 11 | History & Stats | ⚠️ Partial (basic hit rate only) | 3 scenarios |
+| 13 | Data Persistence | ⚠️ Partial (missing columns/tables) | 2 scenarios |
+| 4 | Voice & TTS Generation | ❌ Missing (no adapter) | 0 scenarios |
 | 5 | Notification & Alarm Behavior | ❌ Missing | 0 scenarios |
 | 6 | Background Scheduling | ❌ Missing | 0 scenarios |
 | 7 | Calendar Integration | ❌ Missing | 0 scenarios |
 | 8 | Location Awareness | ❌ Missing | 0 scenarios |
 | 9 | Snooze & Dismissal Flow | ❌ Missing | 0 scenarios |
 | 12 | Sound Library | ❌ Missing | 0 scenarios |
-| - | Harness Infrastructure | ❌ Missing | 16 scenarios exist |
-| - | Mobile App UI | ❌ Missing | 0 scenarios |
+| - | Harness Infrastructure | ❌ Missing (empty `harness/` dir) | 16 scenarios ready |
+| - | Mobile App UI | ❌ Missing (React Native not started) | 0 scenarios |
+
+---
+
+## Current Code Issues (Must Fix)
+
+### `src/test_server.py` - Specific Implementation Gaps
+
+**Chain Engine Bugs (`compute_escalation_chain()`):**
+1. Line ~91: Compressed logic for buffer 20-24 min uses wrong tier calculation
+2. Line ~96: Compressed logic for buffer 10-24 min has incorrect minutes_before values
+3. Line ~104: Minimum chain (≤5 min) needs to include 'critical' tier per spec
+4. Missing: `get_next_unfired_anchor(reminder_id)` function
+5. Missing: Deterministic chain computation (same inputs = same outputs)
+
+**Parser Bugs (`parse_reminder_natural()`):**
+1. Limited regex patterns for time extraction
+2. No support for "tomorrow" date resolution edge cases
+3. Missing LLM adapter interface (no mock-ability)
+4. `reminder_type` not properly set based on input patterns
+
+**Voice Templates (`VOICE_PERSONALITIES`):**
+1. Only 1 template per tier per personality (needs 3+ per spec 10.3)
+2. Missing 'custom' personality support
+3. No variation selection logic (random or rotation)
+
+**Database (`init_db()`):**
+1. Missing columns per spec Section 13 schema
+2. No migration versioning
+3. No WAL mode
+4. No foreign key enforcement
+
+**Stats (`calculate_hit_rate()`):**
+1. Basic implementation, missing trailing 7-day filter
+2. Missing streak counter
+3. Missing common miss window
+4. No 90-day archival
 
 ---
 
@@ -34,52 +70,57 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 ### Phase 1: Foundation (Data & Core Logic)
 
 #### 1.1 [CRITICAL] Create Harness Infrastructure
-**Required before any testing can occur**
+**Required before any scenario testing can occur**
 
-**Current state:** `harness/` directory is empty
+**Current state:** `harness/` directory is EMPTY - no Python files exist
+
+**Dependencies:** None (can start immediately)
 
 **Tasks:**
-- [ ] Create `harness/scenario_harness.py` - main harness entry point
-- [ ] Create `harness/lib/scenario_loader.py` - YAML scenario loader
+- [ ] Create `harness/__init__.py` - package init
+- [ ] Create `harness/scenario_harness.py` - main entry point with CLI (`--project`, `--scenario-dir`, `--verbose`)
+- [ ] Create `harness/lib/__init__.py` - lib package init
+- [ ] Create `harness/lib/scenario_loader.py` - YAML scenario loader with metadata parsing
 - [ ] Create `harness/lib/http_client.py` - HTTP client for API testing
-- [ ] Create `harness/lib/db_checker.py` - SQLite assertion checker
-- [ ] Create `harness/lib/llm_judge.py` - LLM-based assertion judge
+- [ ] Create `harness/lib/db_checker.py` - SQLite assertion checker (verify records exist)
+- [ ] Create `harness/lib/llm_judge.py` - LLM-based assertion judge (uses sonnet-4-20250514)
 - [ ] Create `harness/lib/assertions.py` - assertion types (http_status, db_record, llm_judge)
-- [ ] Add CLI argument parsing (`--project`, `--scenario-dir`, `--verbose`)
 - [ ] Add test runner with pass/fail reporting
-- [ ] Add scenario metadata parsing
+- [ ] Add `/var/otto-scenarios/` directory setup (requires sudo)
+- [ ] Add integration with OTTO_SCENARIO_DIR env var
+
+**Reference:** AGENTS.md says: `sudo python3 harness/scenario_harness.py --project otto-matic`
 
 ---
 
 #### 1.2 [HIGH] Complete SQLite Schema
 **Spec:** Section 13 (Data Persistence)
 
-**Current gaps in `src/test_server.py`:**
-- Missing `origin_lat`, `origin_lng`, `origin_address` in reminders
-- Missing `calendar_event_id` in reminders
-- Missing `tts_fallback` boolean in anchors
-- Missing `snoozed_to` timestamp in anchors
-- Missing `actual_arrival` in history
-- Missing `missed_reason` in history
-- Missing `updated_at` in destination_adjustments
-- Missing `custom_sounds` table
-- Missing `calendar_sync` table
-- Missing migration versioning
+**Current gaps in `src/test_server.py` `init_db()`:**
+- Missing: `origin_lat`, `origin_lng`, `origin_address` in reminders
+- Missing: `calendar_event_id` in reminders
+- Missing: `tts_fallback` boolean in anchors
+- Missing: `snoozed_to` timestamp in anchors
+- Missing: `actual_arrival` in history
+- Missing: `missed_reason` in history
+- Missing: `updated_at` in destination_adjustments
+- Missing: `custom_sounds` table
+- Missing: `calendar_sync` table
+- Missing: `migrations` table for version tracking
+- Missing: WAL mode and foreign keys enforcement
 
 **Tasks:**
-- [ ] Add missing columns to reminders table
-- [ ] Add missing fields to anchors table  
-- [ ] Add missing fields to history table
+- [ ] Create `src/lib/database/__init__.py`
+- [ ] Create `src/lib/database/connection.py` with WAL mode + FK enforcement
+- [ ] Create `src/lib/database/migrations.py` with versioned migrations (v1-vN)
+- [ ] Refactor `init_db()` in test_server.py to use migrations
+- [ ] Add missing columns: reminders (origin_lat, origin_lng, origin_address, calendar_event_id)
+- [ ] Add missing fields: anchors (tts_fallback, snoozed_to)
+- [ ] Add missing fields: history (actual_arrival, missed_reason)
 - [ ] Add destination_adjustments.updated_at
 - [ ] Create custom_sounds table
 - [ ] Create calendar_sync table
-- [ ] Create migrations.py with versioned migrations
-- [ ] Enable foreign keys and WAL mode
-- [ ] Fix existing scenarios: reminder-creation-crud.yaml, reminder-creation-cascade-delete.yaml
-
-**Existing test scenarios to update:**
-- `scenarios/reminder-creation-crud.yaml`
-- `scenarios/reminder-creation-cascade-delete.yaml`
+- [ ] Update existing scenarios with correct field names if needed
 
 ---
 
@@ -333,38 +374,39 @@ The Urgent Voice Alarm app helps users make time-sensitive appointments by provi
 
 ```
 Phase 1: Foundation
-├── 1.1 Harness Infrastructure (unblocks ALL testing)
-├── 1.2 SQLite Schema (blocking everything else)
-├── 1.3 Chain Engine (blocks 2.1, 4.1)
-└── 1.4 Parser (blocks 2.1)
+├── 1.1 Harness Infrastructure ──────────────────┐  (unblocks ALL scenario testing)
+├── 1.2 SQLite Schema ─────────────────────────────┼── (foundation for all features)
+├── 1.3 Chain Engine ──────────────────────────────┼── (blocks: 2.1, 3.1, 4.1)
+└── 1.4 Parser ────────────────────────────────────┴── (blocks: 2.1)
 
 Phase 2: Voice & Notifications
-├── 2.1 TTS Generation (depends on 1.2, 1.4)
-├── 2.2 Voice Personality (depends on 1.2)
-└── 2.3 Notification Behavior (depends on 2.1)
+├── 2.1 TTS Generation ──────────────────────────────┼── (depends on 1.2, 1.4)
+├── 2.2 Voice Personality ──────────────────────────┼── (depends on 1.2)
+└── 2.3 Notification Behavior ──────────────────────┴── (depends on 2.1)
 
 Phase 3: Background & External
-├── 3.1 Background Scheduling (depends on 1.2, 1.3)
-├── 3.2 Calendar Integration (depends on 1.2)
-└── 3.3 Location Awareness (depends on 1.2)
+├── 3.1 Background Scheduling ─────────────────────┬── (depends on 1.2, 1.3)
+├── 3.2 Calendar Integration ────────────────────────┼── (depends on 1.2)
+└── 3.3 Location Awareness ────────────────────────┴── (depends on 1.2)
 
 Phase 4: User Interaction
-├── 4.1 Snooze & Dismissal (depends on 1.1, 1.3)
-├── 4.2 Sound Library (depends on 1.2)
-└── 4.3 History & Stats (depends on 1.2, 4.1)
+├── 4.1 Snooze & Dismissal ─────────────────────────┬── (depends on 1.3)
+├── 4.2 Sound Library ─────────────────────────────┴── (depends on 1.2)
+└── 4.3 History & Stats ───────────────────────────── (depends on 1.2, 4.1)
 
 Phase 5: Mobile App
-└── 5.1 App Structure (depends on all Phase 1-4 features)
+└── 5.1 App Structure (React Native) ────────────────── (depends on all above)
 ```
 
 ---
 
-## Quick Wins (Can Start Immediately)
+## Quick Wins (Can Start Immediately, No Dependencies)
 
-1. **Create harness infrastructure** - `harness/scenario_harness.py` - unblocks all testing
-2. **Fix chain engine bugs** - compressed chain logic is incorrect
-3. **Add message variations** - 3+ per tier per personality
-4. **Enhance keyword extractor** - more patterns for natural language
+1. **Create harness infrastructure** - `harness/scenario_harness.py` - **unblocks all 16 scenario tests**
+2. **Fix chain engine bugs** - compressed chain logic in `compute_escalation_chain()` is incorrect
+3. **Add message variations** - 3+ variations per tier per personality in `VOICE_PERSONALITIES`
+4. **Enhance keyword extractor** - more regex patterns in `parse_reminder_natural()`
+5. **Complete SQLite schema** - add missing columns to `init_db()`
 
 ---
 
