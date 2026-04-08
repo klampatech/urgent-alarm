@@ -12,92 +12,98 @@ A mobile alarm app that speaks escalating urgency messages, adapting based on re
 
 | Spec Section | Feature | Status | Verified Issues | Priority |
 |-------------|---------|--------|-----------------|----------|
-| 2 | Escalation Chain Engine | **Partial** | Bug: 3min produces 2 anchors (needs 3); missing `get_next_unfired_anchor()`; wrong tier mapping for 10-24min | **P0** |
-| 3 | Reminder Parsing | **Partial** | Parser crashes on "in X min"; missing LLM adapter interface; no mock adapter | **P0** |
-| 4 | Voice & TTS Generation | **Partial** | 40 templates exist (1/tier); needs 3/tier (120+ total); no TTS adapter interface | P1 |
+| 2 | Escalation Chain Engine | **Partial** | TC-01 passes, TC-02 fails (4 anchors vs 5, wrong tiers), TC-03 fails (2 anchors vs 3); missing `get_next_unfired_anchor()` | **P0** |
+| 3 | Reminder Parsing | **Partial** | Parser crashes on "dryer in 3 min"; "tomorrow" parsing broken; unintelligible returns confidence instead of error; missing LLM adapter interface | **P0** |
+| 4 | Voice & TTS Generation | **Partial** | 40 templates exist (1/tier); needs 3/tier (120+ total); no variation; no TTS adapter interface | P1 |
 | 5 | Notification & Alarm | **Missing** | Not implemented in test_server.py | P1 |
 | 6 | Background Scheduling | **Missing** | Not implemented; no Notifee integration | P1 |
 | 7 | Calendar Integration | **Missing** | Not implemented; no adapter interface | P2 |
 | 8 | Location Awareness | **Missing** | Not implemented; no adapter interface | P2 |
 | 9 | Snooze & Dismissal | **Missing** | Not implemented; no chain re-computation | P1 |
-| 10 | Voice Personality System | **Partial** | 1 template per tier (40 total); needs 3+ variations each | P1 |
-| 11 | History, Stats & Feedback | **Partial** | Hit rate works; missing common_miss_window, streak, missed_reason tracking | P2 |
+| 10 | Voice Personality System | **Partial** | 1 template per tier (40 total); needs 3+ variations each; no variation logic | P1 |
+| 11 | History, Stats & Feedback | **Partial** | Hit rate works; missing common_miss_window, streak counter, missed_reason tracking | P2 |
 | 12 | Sound Library | **Missing** | Not implemented; no adapter interface | P2 |
-| 13 | Data Persistence | **Partial** | Missing 13 columns, 2 tables, no migration system | **P0** |
+| 13 | Data Persistence | **Partial** | Missing 3 tables (schema_version, calendar_sync, custom_sounds); missing 10 columns; no migration system | **P0** |
 
 ---
 
 ## Current Implementation Verified Issues
 
-### Chain Engine Bugs (Section 2)
+### Chain Engine Bugs (Section 2) — VERIFIED
 
-**Bug 1: 3 min buffer produces only 2 anchors (needs 3)**
-- **Spec TC-03 requires:** 3 anchors: T-3 (firm), T-1 (critical), T-0 (alarm)
-- **Current output:** 2 anchors: T-2 (firm), T-0 (alarm) — MISSING critical anchor
-- **Root cause:** `buffer_minutes <= 4` branch creates `[('firm', buffer-1), ('alarm', 0)]` but `buffer-1 = 2`, missing the `critical` tier entirely
+**TC-01: 30 min buffer → PASSES** (8 anchors: calm, casual, pointed, urgent, pushing, firm, critical, alarm)
 
-**Bug 2: 10-24 min buffer uses wrong tiers**
-- **Spec says:** Skip calm/casual/pointed, start at urgent (T-5)
-- **Current code:** Uses `buffer_minutes >= 10` but still includes pointed/urgent
-- **Correct mapping:**
-  - ≥25 min: full 8 anchors
-  - 20-24 min: 7 anchors (skip calm only)
-  - 15-19 min: 5 anchors (skip calm/casual)
-  - 10-14 min: 5 anchors (urgent, pushing, firm, critical, alarm)
-  - 5-9 min: 3 anchors (firm, critical, alarm)
-  - ≤4 min: 2-3 anchors depending on duration
+**TC-02: 15 min buffer → FAILS**
+- Current: 4 anchors (urgent, pushing, firm:0, critical, alarm)
+- Expected: 5 anchors (urgent, pushing, firm, critical, alarm)
+- Issue: `firm` at `buffer_minutes - 15 = 0` is invalid; wrong tier count
+
+**TC-03: 3 min buffer → FAILS**
+- Current: 2 anchors (firm:2, alarm:0)
+- Expected: 3 anchors (firm:3, critical:1, alarm:0)
+- Issue: Missing critical tier; buffer calculation off
 
 **Missing functions:**
 - `get_next_unfired_anchor(reminder_id)` — returns earliest unfired anchor
 - `get_unfired_anchors(reminder_id)` — returns all unfired anchors
-- `validate_chain()` needs to reject `drive_duration > time_to_arrival`
 
-### Parser Issues (Section 3)
+### Parser Issues (Section 3) — VERIFIED
 
-**Bug 1: Crash on "in X min" format**
-- Input: `"dryer in 3 min"`
+**Bug 1: Crash on "dryer in 3 min"**
 - Error: `IndexError: no such group`
-- Cause: Regex `r'in\s+(\d+)\s*(?:minute|min)'` only captures 1 group, but code expects 3 groups
+- Root cause: Regex pattern mismatch in time extraction
 
-**Bug 2: Unintelligible input returns 0.3 confidence instead of error**
-- Spec TC-06: Should return user-facing error message
-- Current behavior: Returns parsed object with `confidence: 0.3`
+**Bug 2: "meeting tomorrow 2pm, 20 min drive" fails**
+- Current: destination = whole string, arrival_time = None
+- Expected: destination = "meeting", arrival_time = tomorrow 2pm
+
+**Bug 3: Unintelligible input returns confidence instead of error**
+- "asdfgh jkl qwerty" returns confidence: 0.333
+- Spec TC-06: Should return user-facing error "Couldn't understand that — try again"
 
 **Missing:**
-- `ILanguageModelAdapter` interface
-- `MockLanguageModelAdapter` for testing
-- Keyword extraction adapter as fallback
+- `ILanguageModelAdapter` interface with mock implementation
+- Keyword extraction adapter as LLM fallback
 
-### Database Schema Issues (Section 13)
+### Voice Templates (Section 10) — VERIFIED
 
-**Missing from `reminders` table (9 columns):**
+**Current state:**
+- 1 template per personality per tier (40 total)
+- No variation logic — same input always produces same output
+
+**Required:**
+- 3+ templates per personality per tier (120+ total)
+- Random selection or round-robin variation
+
+### Database Schema (Section 13) — VERIFIED
+
+**Missing tables:**
+- `schema_version` — migration tracking
+- `calendar_sync` — calendar connection state
+- `custom_sounds` — imported audio files
+
+**Missing columns in `reminders`:**
 - `origin_lat REAL`
 - `origin_lng REAL`
 - `origin_address TEXT`
 - `calendar_event_id TEXT`
 - `custom_voice_prompt TEXT`
 - `custom_sound_path TEXT`
-- `updated_at TEXT` (partial - exists but not in all paths)
-- `tts_cache_dir TEXT` (for TTS clip storage)
+- `tts_cache_dir TEXT`
 
-**Missing from `anchors` table (2 columns):**
+**Missing columns in `anchors`:**
 - `tts_fallback INTEGER DEFAULT 0`
 - `snoozed_to TEXT`
 
-**Missing from `history` table (3 columns):**
+**Missing columns in `history`:**
 - `actual_arrival TEXT`
 - `missed_reason TEXT`
 - `updated_at TEXT`
 
-**Missing tables (3 total):**
-- `schema_version (version INTEGER PRIMARY KEY)`
-- `calendar_sync (calendar_type, last_sync_at, sync_token, is_connected)`
-- `custom_sounds (id, filename, original_name, category, file_path, duration_seconds, created_at)`
-
-**Missing from `user_preferences`:**
+**Missing columns in `user_preferences`:**
 - `updated_at TEXT`
 
-**Missing `destination_adjustments` columns:**
+**Missing columns in `destination_adjustments`:**
 - `updated_at TEXT`
 
 ---
@@ -247,21 +253,21 @@ class ILocationAdapter(ABC):
 
 1. **Correct anchor tier mapping per spec:**
 ```
-buffer >= 25 min: calm(30), casual(25), pointed(20), urgent(15), pushing(10), firm(5), critical(1), alarm(0)
-buffer 20-24 min: casual(25), pointed(20), urgent(15), pushing(10), firm(5), critical(1), alarm(0)
-buffer 15-19 min: urgent(15), pushing(10), firm(5), critical(1), alarm(0)
-buffer 10-14 min: urgent(15), pushing(10), firm(5), critical(1), alarm(0)
-buffer 5-9 min: firm(5), critical(1), alarm(0)
-buffer 3-4 min: firm(3), critical(1), alarm(0) ← WAS BROKEN
-buffer 1-2 min: critical(1), alarm(0)
-buffer < 1 min: alarm(0)
+buffer >= 25 min: calm(30), casual(25), pointed(20), urgent(15), pushing(10), firm(5), critical(1), alarm(0)  [8 anchors]
+buffer 20-24 min: casual(25), pointed(20), urgent(15), pushing(10), firm(5), critical(1), alarm(0)  [7 anchors]
+buffer 15-19 min: urgent(15), pushing(10), firm(5), critical(1), alarm(0)  [5 anchors]
+buffer 10-14 min: urgent(15), pushing(10), firm(5), critical(1), alarm(0)  [5 anchors]
+buffer 5-9 min: firm(5), critical(1), alarm(0)  [3 anchors]
+buffer 3-4 min: firm(3), critical(1), alarm(0)  [3 anchors] ← WAS BROKEN
+buffer 1-2 min: critical(1), alarm(0)  [2 anchors]
+buffer < 1 min: alarm(0)  [1 anchor]
 ```
 
 2. **Add missing functions:**
 ```python
 def get_next_unfired_anchor(reminder_id: str) -> Optional[Anchor]:
     """Return earliest unfired anchor for recovery after restart."""
-    
+
 def get_unfired_anchors(reminder_id: str) -> List[Anchor]:
     """Return all unfired anchors for recovery scan."""
 
@@ -269,14 +275,18 @@ def validate_chain(arrival_time: datetime, drive_duration: int) -> ValidationRes
     """Validate chain can be created. Reject if drive_duration > time_to_arrival."""
 ```
 
-3. **Fix Bug: 3 min buffer produces 3 anchors**
-   - Current: firm(2), alarm(0) — 2 anchors
-   - Required: firm(3), critical(1), alarm(0) — 3 anchors
+3. **Fix Bug: 15 min buffer produces 4 anchors instead of 5**
+   - Current: urgent(10), pushing(5), firm(0), critical(1), alarm(0) = 4 anchors (firm:0 is invalid)
+   - Required: urgent(15), pushing(10), firm(5), critical(1), alarm(0) = 5 anchors
+
+4. **Fix Bug: 3 min buffer produces 2 anchors instead of 3**
+   - Current: firm(2), alarm(0) = 2 anchors
+   - Required: firm(3), critical(1), alarm(0) = 3 anchors
 
 **Test scenarios to pass (Section 2.5):**
-- [ ] TC-01: 30 min → 8 anchors
-- [ ] TC-02: 15 min → 5 anchors (skip calm/casual)
-- [ ] TC-03: 3 min → 3 anchors ← **Currently fails**
+- [x] TC-01: 30 min → 8 anchors (PASSES)
+- [ ] TC-02: 15 min → 5 anchors (currently 4)
+- [ ] TC-03: 3 min → 3 anchors (currently 2)
 - [ ] TC-04: Invalid chain rejection
 - [ ] TC-05: get_next_unfired_anchor recovery
 - [ ] TC-06: Chain determinism
@@ -293,16 +303,16 @@ def validate_chain(arrival_time: datetime, drive_duration: int) -> ValidationRes
 - LLM adapter configurable via env var (`LLM_PROVIDER=minimax|anthropic`)
 - Keyword extraction fallback with confidence scoring
 - Parse reminder_type enum from context
-- Handle "tomorrow" date resolution
+- Handle "tomorrow" date resolution correctly
 - Reject unintelligible input with user-facing error
 
 **Test scenarios to pass (Section 3.5):**
 - [ ] TC-01: "30 minute drive to Parker Dr, check-in at 9am"
-- [ ] TC-02: "dryer in 3 min" (simple_countdown)
+- [ ] TC-02: "dryer in 3 min" (simple_countdown) — **Currently crashes**
 - [ ] TC-03: "meeting tomorrow 2pm, 20 min drive"
 - [ ] TC-04: LLM API failure fallback
 - [ ] TC-05: Manual field correction
-- [ ] TC-06: Unintelligible input rejection
+- [ ] TC-06: Unintelligible input rejection — **Currently returns 0.333 instead of error**
 - [ ] TC-07: Mock adapter in tests
 
 ---
@@ -320,12 +330,27 @@ def validate_chain(arrival_time: datetime, drive_duration: int) -> ValidationRes
 | No-nonsense | 8 | 3 each | 24 |
 | Calm | 8 | 3 each | 24 |
 
+**Template structure:**
+```python
+VOICE_PERSONALITIES = {
+    'coach': {
+        'urgent': [
+            "Let's GO! {remaining} minutes to {dest}! Time to move!",
+            "Come on! {remaining} min until {dest} — let's go!",
+            "Move it! {dest} in {remaining} — you've got this!",
+        ],
+        # ... 7 more tiers
+    },
+    # ... 4 more personalities
+}
+```
+
 **Test scenarios to pass (Section 10.5):**
 - [ ] TC-01: Coach personality messages (motivational, exclamations)
 - [ ] TC-02: No-nonsense personality messages (brief, direct)
 - [ ] TC-03: Custom personality prompt
 - [ ] TC-04: Personality immutability for existing reminders
-- [ ] TC-05: Message variation (distinct phrasings)
+- [ ] TC-05: Message variation (distinct phrasings on multiple calls)
 
 ---
 
@@ -616,10 +641,10 @@ Phase 4 (Testing):
 
 ## Scenario Coverage Map
 
-| Spec Section | Scenario Files | Status |
-|-------------|----------------|--------|
+| Spec Section | Scenario Files | Current Status |
+|-------------|----------------|----------------|
 | 2 | chain-full-30min, chain-compressed-15min, chain-minimum-3min, chain-invalid-rejected | **Partial (bugs)** |
-| 3 | parse-natural-language, parse-simple-countdown, parse-tomorrow, parse-llm-fallback | **Partial** |
+| 3 | parse-natural-language, parse-simple-countdown, parse-tomorrow, parse-llm-fallback | **Partial (crash)** |
 | 4 | tts-generation, tts-fallback, tts-cache-cleanup | **Missing** |
 | 5 | dnd-early-suppress, dnd-5min-override, quiet-hours, overdue-drop, chain-serialize, alarm-loop | **Missing** |
 | 6 | notifee-schedule, background-fire, recovery-scan, overdue-drop, re-register, late-warning | **Missing** |
@@ -632,7 +657,8 @@ Phase 4 (Testing):
 | 13 | migration-sequence, in-memory-db, cascade-delete, fk-enforcement, uuid-generation | **Partial** |
 
 **Total:** 50 test scenarios defined in spec
-**Currently testable:** ~15 (30%)
+**Currently working:** ~5 (10%) — chain-full-30min, parse-natural-language partial, stats-hit-rate partial
+**Failing:** ~10 (20%) — chain-compressed, chain-minimum, parse-simple-crash, parse-tomorrow
 **Missing coverage:** ~35 scenarios (70%)
 
 ---
@@ -643,5 +669,5 @@ All 50 spec test scenarios have corresponding passing tests.
 
 Every criterion in Sections 2–13 maps to at least one test scenario (Given/When/Then).
 
-**Current test coverage:** 15/50 scenarios (30%)
+**Current test coverage:** 5/50 scenarios (10%) working
 **Target test coverage:** 50/50 scenarios (100%)
