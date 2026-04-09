@@ -7,16 +7,16 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ⚠️ Partial | `test_server.py:138-225` has logic, NOT in dedicated service file |
+| 2. Escalation Chain Engine | ❌ NOT IMPLEMENTED | Logic in `test_server.py:126-225`, but service file NOT created |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `llm_adapter.py` |
-| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist, but voice message generation needs dedicated service file |
+| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist, but voice_generator.py NOT created |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
 | 6. Background Scheduling | ✅ Complete | `src/backend/services/scheduler.py` - recovery scan, re-register, late fire logging |
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
-| 10. Voice Personality | ⚠️ Partial | 5 personalities in `test_server.py:373-570`, NOT in dedicated `message_templates.py` |
-| 11. History & Stats | ⚠️ Partial | `calculate_hit_rate` in `test_server.py:607-626`, NOT in dedicated `stats_service.py` |
+| 10. Voice Personality | ❌ NOT IMPLEMENTED | 5 personalities in `test_server.py:373-570`, but NOT in dedicated `message_templates.py` |
+| 11. History & Stats | ❌ NOT IMPLEMENTED | `calculate_hit_rate` in `test_server.py:607-626`, but NOT in dedicated `stats_service.py` |
 | 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, but `audio_importer.py` not implemented |
 | 13. Data Persistence | ⚠️ Partial | Schema exists but missing `recurrence_rule`, quiet hours not persisted |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does not exist |
