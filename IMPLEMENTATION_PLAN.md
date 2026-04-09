@@ -35,6 +35,14 @@ This document maps the specification requirements to implementation tasks, prior
 - Sound manager (built-in + custom import)
 - Voice personality system with 5 personalities and 3+ variations per tier
 
+**⚠️ Schema Gaps (per spec Section 3.3 & 13.2):**
+- `reminder_type`: Only `countdown_event` supported — **missing** `simple_countdown`, `morning_routine`, `standing_recurring`
+- No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3)
+- No persistent streak counter for recurring reminders (spec Section 11.3)
+
+**❌ Testing Gap:**
+- No unit, integration, or E2E tests exist (spec Section 14 requires all three)
+
 **❌ Remaining Work:**
 
 *Phase 3 - Mobile App (Not Started):*
@@ -51,11 +59,6 @@ This document maps the specification requirements to implementation tasks, prior
 - No unit tests exist for backend services (spec Section 14 requires tests)
 - No integration tests implemented
 - No E2E tests (Detox)
-
-*Schema Gaps:*
-- Reminder types: Only countdown_event supported - **missing simple_countdown, morning_routine, standing_recurring** per spec Section 3.3
-- Recurring reminders: No `recurrence_rule` field (spec Section 1.3, 3.3, 9.3 mentions standing/recurring)
-- Streak tracking: Persistence model incomplete for recurring reminder streaks
 
 *Technical Debt:*
 - `src/test_server.py` is a monolithic 600+ line proof-of-concept — needs refactoring into proper service modules
@@ -388,14 +391,16 @@ This document maps the specification requirements to implementation tasks, prior
 - **Streak tracking:** Stats calculated at query time but no persistent streak counter for recurring reminders
 
 ### Backend Test Coverage
-- No unit tests exist for chain engine, parser, or services (spec Section 14 requires tests)
-- Integration tests not implemented
-- E2E tests not implemented
+- **No tests directory exists** — spec Section 14 requires unit, integration, and E2E tests
+- No unit tests for chain engine (TC-01 through TC-06)
+- No integration tests for reminder creation flow
+- No E2E tests (Detox) for mobile app
 
 ### Technical Debt
-- `src/test_server.py` is a monolithic 600+ line proof-of-concept — needs refactoring into proper service modules
+- `src/test_server.py` contains monolithic chain engine logic — needs refactoring to `src/backend/services/chain_engine.py`
+- `src/backend/services/notification_manager.py` implements DND handling inline — spec calls for separate `dnd_handler.py`
+- `src/backend/services/scheduler.py` implements recovery scan inline — spec calls for separate `recovery_scan.py`
 - TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
-- No unit tests for chain engine test scenarios (TC-01 through TC-06)
 
 ---
 
