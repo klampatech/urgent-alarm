@@ -7,18 +7,18 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ⚠️ Partial | `compute_escalation_chain()` exists in `test_server.py` but NOT as separate `chain_engine.py` service |
-| 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `llm_adapter.py` |
-| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`tts_adapter.py`, `elevenlabs_adapter.py`), voice message generation in `test_server.py` |
+| 2. Escalation Chain Engine | ❌ NOT STARTED | `compute_escalation_chain()` exists in `src/test_server.py:138` but NOT as separate `chain_engine.py` service |
+| 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `src/backend/adapters/llm_adapter.py` |
+| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`src/backend/adapters/tts_adapter.py`, `src/backend/adapters/elevenlabs_adapter.py`), voice message generation in `src/test_server.py` |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
 | 6. Background Scheduling | ✅ Complete | `src/backend/services/scheduler.py` - recovery scan, re-register, late fire logging |
-| 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
+| 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `src/backend/adapters/apple_calendar_adapter.py`, `src/backend/adapters/google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
-| 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
-| 10. Voice Personality | ⚠️ Partial | Templates exist in `test_server.py` (5 personalities × 8 tiers × 3+ variations), but NOT as separate `voice_generator.py` / `message_templates.py` |
-| 11. History & Stats | ⚠️ Partial | `calculate_hit_rate()` exists in `test_server.py`, but `stats_service.py` and `feedback_loop.py` do NOT exist |
-| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, `audio_importer.py` NOT created |
-| 13. Data Persistence | ⚠️ Partial | Schema has gaps - missing `updated_at` in user_preferences, no explicit reminder_type enum, no recurrence_rule field |
+| 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `src/backend/services/dismissal_handler.py` |
+| 10. Voice Personality | ❌ NOT STARTED | Templates exist in `src/test_server.py` (VOICE_PERSONALITIES), but NOT as separate `voice_generator.py` / `message_templates.py` |
+| 11. History & Stats | ❌ NOT STARTED | No stats_service.py or feedback_loop.py implemented |
+| 12. Sound Library | ⚠️ Partial | `src/backend/services/sound_manager.py` exists, `audio_importer.py` NOT created |
+| 13. Data Persistence | ⚠️ Partial | Schema gaps - missing `updated_at` in user_preferences, no recurrence_rule field, no sync_token/is_connected in calendar_sync |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does NOT exist |
 
 ### Current Implementation Status
@@ -41,11 +41,11 @@ This document maps the specification requirements to implementation tasks, prior
 - `calculate_hit_rate()` - stats in test_server.py, NOT extracted to `stats_service.py` / `feedback_loop.py`
 
 **❌ NOT IMPLEMENTED - Missing Service Files:**
-- `src/backend/services/chain_engine.py` — extract chain logic from test_server.py
-- `src/backend/services/voice_generator.py` — extract message generation from test_server.py
-- `src/backend/services/message_templates.py` — extract templates from test_server.py
-- `src/backend/services/feedback_loop.py` — drive_duration adjustment (part of stats)
-- `src/backend/services/stats_service.py` — extract stats from test_server.py
+- `src/backend/services/chain_engine.py` — extract chain logic from src/test_server.py:138
+- `src/backend/services/voice_generator.py` — extract message generation from src/test_server.py
+- `src/backend/services/message_templates.py` — extract templates from src/test_server.py (VOICE_PERSONALITIES)
+- `src/backend/services/feedback_loop.py` — drive_duration adjustment (NOT IMPLEMENTED)
+- `src/backend/services/stats_service.py` — hit rate, streak, common miss (NOT IMPLEMENTED)
 - `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12
 
 **⚠️ Schema Gaps (per spec Section 13.2):**
