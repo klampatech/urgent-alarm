@@ -21,7 +21,7 @@ This document maps the specification requirements to implementation tasks, prior
 | 13. Data Persistence | ⚠️ Partial | Schema has gaps per verified analysis below; 001_initial_schema.sql verified at `src/backend/database/migrations/001_initial_schema.sql` |
 | 14. Definition of Done | ❌ NOT STARTED | tests/ directory does NOT exist (verified: `glob tests/**/*.py` returned no files) |
 
-> **Verification Notes (2026-04-09):** All gap analysis entries verified by code inspection. `src/backend/services/` contains: reminder_parser.py, snooze_handler.py, dismissal_handler.py, scheduler.py, notification_manager.py, sound_manager.py. Missing: chain_engine.py, voice_generator.py, message_templates.py, feedback_loop.py, stats_service.py. `src/backend/adapters/` contains 11 files. Missing: audio_importer.py.
+> **Verification Notes (2026-04-09):** All gap analysis entries verified by code inspection. `src/backend/services/` contains: reminder_parser.py, snooze_handler.py, dismissal_handler.py, scheduler.py, notification_manager.py, sound_manager.py. Missing: chain_engine.py, voice_generator.py, message_templates.py, feedback_loop.py, stats_service.py. `src/backend/adapters/` contains 11 files. Missing: audio_importer.py. **Verified 2026-04-09:** `test_server.py` exists at `src/test_server.py` with compute_escalation_chain at line 138, VOICE_PERSONALITIES at line 373. `tests/` directory does NOT exist.
 
 ### Verified Missing Files (Phase 1 Backend Services)
 
