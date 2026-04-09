@@ -24,7 +24,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 **✅ Backend Complete (Phases 1-2):**
 - SQLite with 7 tables: reminders, anchors, history, destination_adjustments, user_preferences, custom_sounds, calendar_sync
-- Chain engine (`compute_escalation_chain`, `get_next_unfired_anchor`)
+- Chain engine logic in `test_server.py:190-223`
 - LLM adapter interface + MiniMax + Mock implementations
 - TTS adapter interface + ElevenLabs + Mock implementations
 - Notification manager (tier sounds, DND, quiet hours, chain overlap)
@@ -36,14 +36,14 @@ This document maps the specification requirements to implementation tasks, prior
 - Voice personality system with 5 personalities and 3+ variations per tier
 
 **⚠️ Schema Gaps (per spec Section 3.3 & 13.2):**
-- `reminder_type`: `countdown_event` and `simple_countdown` implemented (per code). **Missing:** `morning_routine`, `standing_recurring`
+- `reminder_type`: `countdown_event` and `simple_countdown` implemented. **Missing:** `morning_routine`, `standing_recurring`
 - No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3)
 - No persistent streak counter for recurring reminders (spec Section 11.3)
 - Quiet hours not persisted to user_preferences table (config in memory only)
 
 **❌ Testing Gap:**
 - No unit, integration, or E2E tests exist (spec Section 14 requires all three)
-- No `tests/` directory (only `test_imports.py` exists)
+- No `tests/` directory created
 
 **❌ Missing Service Files (Technical Debt):**
 - No `src/backend/services/chain_engine.py` — chain logic embedded in `test_server.py:190-223`
@@ -420,27 +420,15 @@ This document maps the specification requirements to implementation tasks, prior
 ## Known Gaps & Technical Debt
 
 ### Schema Gaps
-- **Reminder types:** Schema only supports `countdown_event` — missing `simple_countdown`, `morning_routine`, `standing_recurring` per spec Section 3.3
+- **Reminder types:** Schema only supports `countdown_event` and `simple_countdown` — missing `morning_routine`, `standing_recurring` per spec Section 3.3
 - **Recurring reminders:** No `recurrence_rule` field in reminders table (spec Section 1.3, 3.3, 9.3 mentions standing/recurring with RRULE support)
-- **Streak tracking:** Stats calculated at query time but no persistent streak counter for recurring reminders
+- **Streak tracking:** No persistent streak counter for recurring reminders
 
-### New: Schema Migration for Reminder Types [PENDING]
-- **Task:** Add migration to add missing reminder types and recurrence_rule field
-- **Files:** `src/backend/database/migrations/002_reminder_types.sql`
-
-### Backend Test Coverage
+### Testing Gap
 - **No tests directory exists** — spec Section 14 requires unit, integration, and E2E tests
-- No unit tests for chain engine (TC-01 through TC-06)
+- No unit tests for chain engine, parser, adapters
 - No integration tests for reminder creation flow
 - No E2E tests (Detox) for mobile app
-
-### New: Unit Tests [PENDING]
-- **Task:** Write unit tests for chain engine, parser, TTS adapter, LLM adapter
-- **Files:** `tests/unit/test_chain_engine.py`, `tests/unit/test_reminder_parser.py`, etc.
-
-### New: Integration Tests [PENDING]
-- **Task:** Write integration tests for reminder creation flow, anchor firing, snooze recovery
-- **Files:** `tests/integration/test_reminder_flow.py`, etc.
 
 ### Technical Debt
 
@@ -453,8 +441,7 @@ This document maps the specification requirements to implementation tasks, prior
 - No `src/backend/adapters/audio_importer.py` — custom sound import logic not implemented
 
 **Other Technical Debt:**
-- `src/backend/services/notification_manager.py` implements DND handling inline — spec calls for separate `dnd_handler.py`
-- `src/backend/services/scheduler.py` implements recovery scan inline — spec calls for separate `recovery_scan.py`
+- `src/test_server.py` is a monolithic 600+ line proof-of-concept — needs refactoring into proper service modules
 - TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
 
 ---
