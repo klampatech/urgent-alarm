@@ -9,7 +9,7 @@ This document maps the specification requirements to implementation tasks, prior
 |-------------|--------|------------------------|
 | 2. Escalation Chain Engine | ❌ NOT STARTED | `compute_escalation_chain()` exists in `src/test_server.py:138` but NOT as separate `chain_engine.py` service |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `src/backend/adapters/llm_adapter.py` |
-| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`src/backend/adapters/tts_adapter.py`, `src/backend/adapters/elevenlabs_adapter.py`), voice message generation in `src/test_server.py` |
+| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`src/backend/adapters/tts_adapter.py`, `src/backend/adapters/elevenlabs_adapter.py`), voice message generation in `src/test_server.py:587` but NOT extracted to `voice_generator.py` |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
 | 6. Background Scheduling | ✅ Complete | `src/backend/services/scheduler.py` - recovery scan, re-register, late fire logging |
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `src/backend/adapters/apple_calendar_adapter.py`, `src/backend/adapters/google_calendar_adapter.py` |
@@ -36,14 +36,16 @@ This document maps the specification requirements to implementation tasks, prior
 - Reminder parser: `src/backend/services/reminder_parser.py`
 
 **⚠️ Currently Implemented (in `test_server.py` only, not as separate services):**
-- `compute_escalation_chain()` - chain logic in test_server.py, NOT extracted to `chain_engine.py`
-- `VOICE_PERSONALITIES` dict + message templates in test_server.py, NOT extracted to `voice_generator.py` / `message_templates.py`
-- `calculate_hit_rate()` - stats in test_server.py, NOT extracted to `stats_service.py` / `feedback_loop.py`
+- `compute_escalation_chain()` - chain logic in test_server.py:138, NOT extracted to `chain_engine.py`
+- `validate_chain()` - validation in test_server.py:217, NOT extracted
+- `get_next_unfired_anchor()` - anchor lookup in test_server.py:227, NOT extracted
+- `VOICE_PERSONALITIES` dict + `generate_voice_message()` in test_server.py:373,587, NOT extracted to `voice_generator.py` / `message_templates.py`
+- `calculate_hit_rate()` - stats in test_server.py:607, NOT extracted to `stats_service.py` / `feedback_loop.py`
 
 **❌ NOT IMPLEMENTED - Missing Service Files:**
 - `src/backend/services/chain_engine.py` — chain logic in src/test_server.py:138, needs extraction
-- `src/backend/services/voice_generator.py` — message generation in test_server.py, needs extraction
-- `src/backend/services/message_templates.py` — templates in test_server.py, needs extraction
+- `src/backend/services/voice_generator.py` — message generation in test_server.py:587, needs extraction
+- `src/backend/services/message_templates.py` — templates in test_server.py:373, needs extraction
 - `src/backend/services/feedback_loop.py` — drive_duration adjustment, NOT IMPLEMENTED
 - `src/backend/services/stats_service.py` — hit rate, streak, common miss, NOT IMPLEMENTED
 - `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 - DOES NOT EXIST
@@ -52,7 +54,7 @@ This document maps the specification requirements to implementation tasks, prior
 - Schema has `countdown_event` DEFAULT but missing explicit CHECK constraint for enum values (`simple_countdown`, `morning_routine`, `standing_recurring`)
 - No `recurrence_rule` field in reminders table for recurring reminders
 - `user_preferences` table has only `key, value` columns - missing `updated_at` column
-- `calendar_sync` table is completely wrong - it stores calendar EVENT data (id, event_id, event_title, etc.) instead of SYNC STATE (`sync_token`, `is_connected`)
+- `calendar_sync` table is completely wrong - it stores calendar EVENT data (id, event_id, event_title, etc.) instead of SYNC STATE (`sync_token`, `is_connected`, `calendar_type`)
 - No CHECK constraint for `reminder_type` enum values
 - Schema has `calendar_event_id` in reminders but no per-reminder streak field for recurring reminders
 
