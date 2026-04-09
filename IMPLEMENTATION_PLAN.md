@@ -15,10 +15,10 @@ This document maps the specification requirements to implementation tasks, prior
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `src/backend/adapters/apple_calendar_adapter.py`, `src/backend/adapters/google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `src/backend/services/dismissal_handler.py` |
-| 10. Voice Personality | ❌ NOT STARTED | Templates exist in `src/test_server.py` (VOICE_PERSONALITIES), but NOT as separate `voice_generator.py` / `message_templates.py` |
-| 11. History & Stats | ❌ NOT STARTED | No stats_service.py or feedback_loop.py implemented |
+| 10. Voice Personality | ❌ NOT STARTED | Templates exist in `src/test_server.py:373` (VOICE_PERSONALITIES), but NOT as separate `voice_generator.py` / `message_templates.py` |
+| 11. History & Stats | ❌ NOT STARTED | `calculate_hit_rate()` exists in `src/test_server.py:607`, but NOT extracted to `stats_service.py`; `feedback_loop.py` NOT created |
 | 12. Sound Library | ⚠️ Partial | `src/backend/services/sound_manager.py` exists, `audio_importer.py` NOT created |
-| 13. Data Persistence | ⚠️ Partial | Schema gaps - missing `updated_at` in user_preferences, no recurrence_rule field, no sync_token/is_connected in calendar_sync |
+| 13. Data Persistence | ⚠️ Partial | Schema gaps - `user_preferences` missing `updated_at`, `calendar_sync` has wrong schema (stores events, not sync state), no `recurrence_rule` field |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does NOT exist |
 
 ### Current Implementation Status
@@ -37,22 +37,23 @@ This document maps the specification requirements to implementation tasks, prior
 
 **⚠️ Currently Implemented (in `test_server.py` only, not as separate services):**
 - `compute_escalation_chain()` - chain logic in test_server.py, NOT extracted to `chain_engine.py`
-- `VOICE_PERSONALITIES` dict + `generate_voice_message()` - message generation in test_server.py, NOT extracted to `voice_generator.py` / `message_templates.py`
+- `VOICE_PERSONALITIES` dict + message templates in test_server.py, NOT extracted to `voice_generator.py` / `message_templates.py`
 - `calculate_hit_rate()` - stats in test_server.py, NOT extracted to `stats_service.py` / `feedback_loop.py`
 
 **❌ NOT IMPLEMENTED - Missing Service Files:**
-- `src/backend/services/chain_engine.py` — extract chain logic from src/test_server.py:138
-- `src/backend/services/voice_generator.py` — extract message generation from src/test_server.py
-- `src/backend/services/message_templates.py` — extract templates from src/test_server.py (VOICE_PERSONALITIES)
-- `src/backend/services/feedback_loop.py` — drive_duration adjustment (NOT IMPLEMENTED)
-- `src/backend/services/stats_service.py` — hit rate, streak, common miss (NOT IMPLEMENTED)
-- `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12
+- `src/backend/services/chain_engine.py` — chain logic in src/test_server.py:138, needs extraction
+- `src/backend/services/voice_generator.py` — message generation in test_server.py, needs extraction
+- `src/backend/services/message_templates.py` — templates in test_server.py, needs extraction
+- `src/backend/services/feedback_loop.py` — drive_duration adjustment, NOT IMPLEMENTED
+- `src/backend/services/stats_service.py` — hit rate, streak, common miss, NOT IMPLEMENTED
+- `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 - DOES NOT EXIST
 
 **⚠️ Schema Gaps (per spec Section 13.2):**
-- `reminder_type`: Schema has `countdown_event` DEFAULT but no CHECK constraint for all enum values (`simple_countdown`, `morning_routine`, `standing_recurring`)
-- No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3)
-- `user_preferences` table missing `updated_at` column per spec Section 13.2
-- No dedicated `calendar_sync` table with the full spec schema (has basic columns but missing `sync_token`, `is_connected`)
+- Schema has `countdown_event` DEFAULT but missing explicit CHECK constraint for enum values (`simple_countdown`, `morning_routine`, `standing_recurring`)
+- No `recurrence_rule` field in reminders table for recurring reminders
+- `user_preferences` table has only `key, value` columns - missing `updated_at` column
+- `calendar_sync` table is completely wrong - it stores calendar EVENT data (id, event_id, event_title, etc.) instead of SYNC STATE (`sync_token`, `is_connected`)
+- No CHECK constraint for `reminder_type` enum values
 - Schema has `calendar_event_id` in reminders but no per-reminder streak field for recurring reminders
 
 **❌ Testing Gap:**
@@ -493,19 +494,20 @@ This document maps the specification requirements to implementation tasks, prior
 ### Missing Service Files (per spec Section 2-12)
 
 **These files MUST be created per spec sections:**
-- ⚠️ `src/backend/services/chain_engine.py` — chain logic in `test_server.py`, needs extraction per spec Section 2
-- ⚠️ `src/backend/services/voice_generator.py` — message generation in `test_server.py`, needs extraction per spec Section 4, 10
-- ⚠️ `src/backend/services/message_templates.py` — templates in `test_server.py`, needs extraction per spec Section 10
-- ⚠️ `src/backend/services/feedback_loop.py` — drive_duration adjustment in `test_server.py`, needs extraction per spec Section 11
-- ⚠️ `src/backend/services/stats_service.py` — stats in `test_server.py`, needs extraction per spec Section 11
+- ⚠️ `src/backend/services/chain_engine.py` — chain logic in `src/test_server.py:138`, needs extraction per spec Section 2
+- ⚠️ `src/backend/services/voice_generator.py` — message generation in `src/test_server.py`, needs extraction per spec Section 4, 10
+- ⚠️ `src/backend/services/message_templates.py` — templates in `src/test_server.py:373`, needs extraction per spec Section 10
+- ⚠️ `src/backend/services/feedback_loop.py` — drive_duration adjustment in `src/test_server.py`, NOT IMPLEMENTED, needs spec Section 11
+- ⚠️ `src/backend/services/stats_service.py` — `calculate_hit_rate()` in `src/test_server.py:607`, needs extraction per spec Section 11
 - ❌ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 **DOES NOT EXIST**
 
 ### Schema Gaps (per spec Section 13.2)
 
 **These columns/tables need migration:**
-- ❌ `user_preferences` table missing `updated_at` column
+- ❌ `user_preferences` table missing `updated_at` column (currently has only `key, value`)
 - ❌ `reminders` table missing `recurrence_rule` field for recurring reminders
-- ❌ `calendar_sync` table missing `sync_token` and `is_connected` columns
+- ❌ `calendar_sync` table has WRONG SCHEMA - currently stores calendar EVENTS (id, event_id, event_title, etc.) but spec requires SYNC STATE (`sync_token`, `is_connected`, `last_sync_at`)
+- ❌ No CHECK constraint for `reminder_type` enum values (spec requires: `countdown_event`, `simple_countdown`, `morning_routine`, `standing_recurring`)
 - ❌ No CHECK constraint for `reminder_type` enum values
 
 ### Other Technical Debt
