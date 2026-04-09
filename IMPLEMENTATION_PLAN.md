@@ -15,22 +15,24 @@ This document maps the specification requirements to implementation tasks, prior
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
-| 10. Voice Personality | ⚠️ Partial | Templates in `src/test_server.py:373-584` (VOICE_PERSONALITIES dict), NOT extracted to message_templates.py |
+| 10. Voice Personality | ⚠️ Partial | Templates in `src/test_server.py:373-584` (VOICE_PERSONALITIES dict with 5×8×3 variations), NOT extracted to message_templates.py |
 | 11. History & Stats | ⚠️ Partial | `calculate_hit_rate()` in `src/test_server.py:607-626`, NOT extracted to stats_service.py; feedback_loop.py NOT IMPLEMENTED |
-| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, `audio_importer.py` NOT created |
-| 13. Data Persistence | ⚠️ Partial | Schema has gaps per verified analysis below |
-| 14. Definition of Done | ❌ NOT STARTED | Tests directory does NOT exist |
+| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists at `src/backend/services/sound_manager.py`, `audio_importer.py` NOT created |
+| 13. Data Persistence | ⚠️ Partial | Schema has gaps per verified analysis below; 001_initial_schema.sql verified at `src/backend/database/migrations/001_initial_schema.sql` |
+| 14. Definition of Done | ❌ NOT STARTED | tests/ directory does NOT exist (verified: `glob tests/**/*.py` returned no files) |
+
+> **Verification Notes (2026-04-09):** All gap analysis entries verified by code inspection. `src/backend/services/` contains: reminder_parser.py, snooze_handler.py, dismissal_handler.py, scheduler.py, notification_manager.py, sound_manager.py. Missing: chain_engine.py, voice_generator.py, message_templates.py, feedback_loop.py, stats_service.py. `src/backend/adapters/` contains 11 files. Missing: audio_importer.py.
 
 ### Verified Missing Files (Phase 1 Backend Services)
 
-**Currently NOT in src/backend/services/:**
-- ❌ `chain_engine.py` — logic at test_server.py:138-214 compute_escalation_chain(), validate_chain()
+**Currently NOT in src/backend/services/ (verified via glob):**
+- ❌ `chain_engine.py` — logic at test_server.py:138-214 compute_escalation_chain(), validate_chain(), get_next_unfired_anchor()
 - ❌ `voice_generator.py` — logic at test_server.py:587-603 generate_voice_message()
-- ❌ `message_templates.py` — templates at test_server.py:373-584 (VOICE_PERSONALITIES dict)
-- ❌ `feedback_loop.py` — NOT IMPLEMENTED
+- ❌ `message_templates.py` — templates at test_server.py:373-584 (VOICE_PERSONALITIES dict: 5 personalities × 8 tiers × 3+ variations each)
+- ❌ `feedback_loop.py` — NOT IMPLEMENTED anywhere in codebase
 - ❌ `stats_service.py` — logic at test_server.py:607-626 calculate_hit_rate(), NOT extracted
 
-**Currently NOT in src/backend/adapters/:**
+**Currently NOT in src/backend/adapters/ (verified via glob):**
 - ❌ `audio_importer.py` — per spec Section 12, NOT CREATED
 
 ### Verified Schema Gaps (per spec Section 13.2)
