@@ -7,7 +7,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ❌ NOT STARTED | `compute_escalation_chain()` exists in `src/test_server.py:138` but NOT as separate `chain_engine.py` service |
+| 2. Escalation Chain Engine | ❌ NOT STARTED | Logic exists in `src/test_server.py:138` but NOT extracted to `chain_engine.py` service |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `src/backend/adapters/llm_adapter.py` |
 | 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`src/backend/adapters/tts_adapter.py`, `src/backend/adapters/elevenlabs_adapter.py`), voice message generation in `src/test_server.py:587` but NOT extracted to `voice_generator.py` |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
@@ -23,22 +23,18 @@ This document maps the specification requirements to implementation tasks, prior
 
 ### Verified Schema Gaps (per spec Section 13.2)
 
-**SCHEMA UPDATED in test_server.py** - The in-memory DB init now has correct schema:
-- ✅ Added `updated_at` column to `user_preferences` table
-- ✅ Fixed `calendar_sync` table to store sync state (`calendar_type` PRIMARY KEY, last_sync_at, sync_token, is_connected)
-- ✅ Added `custom_sounds` table with spec fields
-- ✅ Added `origin_lat`, `origin_lng`, `origin_address`, `calendar_event_id`, `custom_sound_path` to reminders
-
-**⚠️ Migration file 001_initial_schema.sql still has WRONG schema:**
-- `calendar_sync` table still stores EVENT data instead of sync state (needs migration 002)
-- `user_preferences` still missing `updated_at` column
-- No CHECK constraints for enum values
+**Migration file 001_initial_schema.sql has WRONG schema:**
+- `calendar_sync` table stores EVENT data instead of sync state (calendar_type PRIMARY KEY, last_sync_at, sync_token, is_connected)
+- `user_preferences` table missing `updated_at` column (spec Section 13.2 requires it)
+- No `recurrence_rule` field in reminders table for recurring reminders
+- No CHECK constraints for `reminder_type` and `urgency_tier` enum values
 
 **Schema gaps requiring new migration (002):**
-- Fix `calendar_sync` table schema (currently stores events, should store sync state)
+- Fix `calendar_sync` table schema (currently stores events, should store sync state per spec Section 13.2)
 - Add `updated_at` column to `user_preferences` table
-- Consider adding `recurrence_rule` field for recurring reminders (spec Section 3.3)
-- Add CHECK constraints for `reminder_type` and `urgency_tier` enum values
+- Add `recurrence_rule` field to `reminders` table for recurring reminders (spec Section 3.3)
+- Add CHECK constraints for `reminder_type` enum values (countdown_event | simple_countdown | morning_routine | standing_recurring)
+- Add CHECK constraints for `urgency_tier` enum values (calm | casual | pointed | urgent | pushing | firm | critical | alarm)
 
 **⚠️ Remaining Work - Backend Service Files:**
 
@@ -457,19 +453,14 @@ This document maps the specification requirements to implementation tasks, prior
 
 ## Known Gaps & Technical Debt
 
-### Schema Gaps (per spec Section 3.3 & 13.2) - PARTIALLY FIXED
+### Schema Gaps (per spec Section 3.3 & 13.2) - VERIFIED
 
-**SCHEMA UPDATED in test_server.py (in-memory DB):**
-- ✅ Added `updated_at` column to `user_preferences` table
-- ✅ Fixed `calendar_sync` table to store sync state
-- ✅ Added `custom_sounds` table with spec fields
-
-**Migration file 001_initial_schema.sql still needs fixing (migration 002):**
-- ❌ `calendar_sync` table still has WRONG SCHEMA - stores EVENTS instead of SYNC STATE
-- ❌ `user_preferences` table still missing `updated_at` column
+**Migration file 001_initial_schema.sql has WRONG schema:**
+- ❌ `calendar_sync` table stores EVENTS instead of SYNC STATE — spec requires: calendar_type PRIMARY KEY, last_sync_at, sync_token, is_connected
+- ❌ `user_preferences` table missing `updated_at` column
 - ❌ `reminders` table MISSING `recurrence_rule` field for recurring reminders
-- ❌ No CHECK constraint for `reminder_type` enum values
-- ❌ No CHECK constraint for `urgency_tier` enum values
+- ❌ No CHECK constraint for `reminder_type` enum values (countdown_event | simple_countdown | morning_routine | standing_recurring)
+- ❌ No CHECK constraint for `urgency_tier` enum values (calm | casual | pointed | urgent | pushing | firm | critical | alarm)
 
 ### Testing Gap (per spec Section 14) - VERIFIED
 
@@ -486,7 +477,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 **These files MUST be created per spec sections:**
 - ⚠️ `src/backend/services/chain_engine.py` — chain logic in `src/test_server.py:138`, needs extraction per spec Section 2
-- ⚠️ `src/backend/services/voice_generator.py` — message generation in `src/test_server.py`, needs extraction per spec Section 4, 10
+- ⚠️ `src/backend/services/voice_generator.py` — message generation in `src/test_server.py:587`, needs extraction per spec Section 4, 10
 - ⚠️ `src/backend/services/message_templates.py` — templates in `src/test_server.py:373`, needs extraction per spec Section 10
 - ⚠️ `src/backend/services/feedback_loop.py` — drive_duration adjustment in `src/test_server.py`, NOT IMPLEMENTED, needs spec Section 11
 - ⚠️ `src/backend/services/stats_service.py` — `calculate_hit_rate()` in `src/test_server.py:607`, needs extraction per spec Section 11
@@ -501,7 +492,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 ```
 Phase 1 (Foundation) - PARTIALLY COMPLETE - Logic in test_server.py needs extraction
-├── 1. Database Migration System ✅
+├── 1. Database Migration System ⚠️ (schema in test_server.py correct, migration file needs 002)
 ├── 2. Chain Engine ❌ (logic in test_server.py:138, NOT extracted to chain_engine.py)
 ├── 3. LLM Adapter Interface + Mock ✅
 ├── 4. Reminder Parser Integration ✅
@@ -532,11 +523,6 @@ Phase 4 (Testing & Schema) - NOT STARTED
 ├── 23. Integration Tests ❌ (tests/ directory does NOT exist)
 ├── 24. Schema Migration ❌ (missing columns per spec Section 13.2)
 └── 25. E2E Tests ❌ (mobile app not started)
-```
-├── 22. Unit Tests (depends on phases 1-2 service extraction)
-├── 23. Integration Tests (depends on 22)
-├── 24. Schema Migration (add missing columns)
-└── 25. E2E Tests (depends on phase 3)
 ```
 
 ---
