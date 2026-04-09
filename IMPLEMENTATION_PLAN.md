@@ -9,7 +9,7 @@ This document maps the specification requirements to implementation tasks, prior
 |-------------|--------|------------------------|
 | 2. Escalation Chain Engine | ❌ NOT STARTED | `src/backend/services/chain_engine.py` does NOT exist |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `llm_adapter.py` |
-| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist, but voice_generator.py NOT created |
+| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`tts_adapter.py`, `elevenlabs_adapter.py`), but `voice_generator.py` NOT created for message generation |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
 | 6. Background Scheduling | ✅ Complete | `src/backend/services/scheduler.py` - recovery scan, re-register, late fire logging |
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
@@ -18,7 +18,7 @@ This document maps the specification requirements to implementation tasks, prior
 | 10. Voice Personality | ❌ NOT STARTED | `voice_generator.py` and `message_templates.py` do NOT exist |
 | 11. History & Stats | ❌ NOT STARTED | `stats_service.py` and `feedback_loop.py` do NOT exist |
 | 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, `audio_importer.py` NOT created |
-| 13. Data Persistence | ⚠️ Partial | Schema exists but missing `reminder_type` enum values, `recurrence_rule`, `updated_at` in user_preferences |
+| 13. Data Persistence | ⚠️ Partial | Schema has gaps - missing `updated_at` in user_preferences, no explicit reminder_type enum, no recurrence_rule field |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does NOT exist |
 
 ### Current Implementation Status
@@ -43,11 +43,12 @@ This document maps the specification requirements to implementation tasks, prior
 - `src/backend/services/stats_service.py` — stats per spec Section 11
 - `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12
 
-**⚠️ Schema Gaps (per spec Section 3.3 & 13.2):**
-- `reminder_type`: Schema has `countdown_event` DEFAULT - missing explicit enum values: `simple_countdown`, `morning_routine`, `standing_recurring`
+**⚠️ Schema Gaps (per spec Section 13.2):**
+- `reminder_type`: Schema has `countdown_event` DEFAULT but no CHECK constraint for all enum values (`simple_countdown`, `morning_routine`, `standing_recurring`)
 - No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3)
-- Quiet hours not persisted to user_preferences table
-- `user_preferences` table missing `updated_at` column (spec Section 13.2)
+- `user_preferences` table missing `updated_at` column per spec Section 13.2
+- No dedicated `calendar_sync` table with the full spec schema (has basic columns but missing `sync_token`, `is_connected`)
+- Schema has `calendar_event_id` in reminders but no per-reminder streak field for recurring reminders
 
 **❌ Testing Gap:**
 - No unit, integration, or E2E tests exist (spec Section 14 requires all three)
