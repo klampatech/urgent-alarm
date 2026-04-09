@@ -18,58 +18,32 @@ This document maps the specification requirements to implementation tasks, prior
 | 10. Voice Personality | ❌ NOT STARTED | Templates exist in `src/test_server.py:373` (VOICE_PERSONALITIES), but NOT as separate `voice_generator.py` / `message_templates.py` |
 | 11. History & Stats | ❌ NOT STARTED | `calculate_hit_rate()` exists in `src/test_server.py:607`, but NOT extracted to `stats_service.py`; `feedback_loop.py` NOT created |
 | 12. Sound Library | ⚠️ Partial | `src/backend/services/sound_manager.py` exists, `audio_importer.py` NOT created |
-| 13. Data Persistence | ⚠️ Partial | Schema gaps - `user_preferences` missing `updated_at`, `calendar_sync` has wrong schema (stores events, not sync state), no `recurrence_rule` field |
+| 13. Data Persistence | ⚠️ Partial | Schema gaps confirmed - `user_preferences` missing `updated_at`, `calendar_sync` wrong schema (stores events, not sync state), no `recurrence_rule` field in reminders, no CHECK constraints for enums |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does NOT exist |
 
-### Current Implementation Status
+### Verified Schema Gaps (per spec Section 13.2)
 
-**✅ Backend Services Implemented:**
-- SQLite with schema in `src/backend/database/migrations/001_initial_schema.sql`
-- LLM adapter interface + MiniMax + Mock: `src/backend/adapters/llm_adapter.py`, `minimax_adapter.py`, `mock_llm.py`
-- TTS adapter interface + ElevenLabs + Mock: `src/backend/adapters/tts_adapter.py`, `elevenlabs_adapter.py`, `mock_tts.py`
-- Notification manager: `src/backend/services/notification_manager.py`
-- Scheduler: `src/backend/services/scheduler.py`
-- Calendar adapters: `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py`
-- Location adapter: `src/backend/adapters/location_adapter.py`
-- Snooze/Dismissal handlers: `src/backend/services/snooze_handler.py`, `dismissal_handler.py`
-- Sound manager: `src/backend/services/sound_manager.py`
-- Reminder parser: `src/backend/services/reminder_parser.py`
+**CONFIRMED - Schema 001_initial_schema.sql issues:**
+- `user_preferences` table has ONLY `key, value` columns - **MISSING `updated_at` column**
+- `calendar_sync` table has WRONG schema - currently stores EVENT data (id, calendar_id, event_id, event_title, etc.) instead of SYNC STATE (`calendar_type PRIMARY KEY, last_sync_at, sync_token, is_connected`)
+- `reminders` table MISSING `recurrence_rule` field for recurring reminders
+- No CHECK constraint for `reminder_type` enum values (spec requires: countdown_event, simple_countdown, morning_routine, standing_recurring)
+- No CHECK constraint for `urgency_tier` enum values in anchors table
 
-**⚠️ Currently Implemented (in `test_server.py` only, not as separate services):**
-- `compute_escalation_chain()` - chain logic in test_server.py:138, NOT extracted to `chain_engine.py`
-- `validate_chain()` - validation in test_server.py:217, NOT extracted
-- `get_next_unfired_anchor()` - anchor lookup in test_server.py:227, NOT extracted
-- `VOICE_PERSONALITIES` dict + `generate_voice_message()` in test_server.py:373,587, NOT extracted to `voice_generator.py` / `message_templates.py`
-- `calculate_hit_rate()` - stats in test_server.py:607, NOT extracted to `stats_service.py` / `feedback_loop.py`
-
-**❌ NOT IMPLEMENTED - Missing Service Files:**
-- `src/backend/services/chain_engine.py` — chain logic in src/test_server.py:138, needs extraction
-- `src/backend/services/voice_generator.py` — message generation in test_server.py:587, needs extraction
-- `src/backend/services/message_templates.py` — templates in test_server.py:373, needs extraction
-- `src/backend/services/feedback_loop.py` — drive_duration adjustment, NOT IMPLEMENTED
-- `src/backend/services/stats_service.py` — hit rate, streak, common miss, NOT IMPLEMENTED
-- `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 - DOES NOT EXIST
-
-**⚠️ Schema Gaps (per spec Section 13.2):**
-- Schema has `countdown_event` DEFAULT but missing explicit CHECK constraint for enum values (`simple_countdown`, `morning_routine`, `standing_recurring`)
-- No `recurrence_rule` field in reminders table for recurring reminders
-- `user_preferences` table has only `key, value` columns - missing `updated_at` column
-- `calendar_sync` table is completely wrong - it stores calendar EVENT data (id, event_id, event_title, etc.) instead of SYNC STATE (`sync_token`, `is_connected`, `calendar_type`)
-- No CHECK constraint for `reminder_type` enum values
-- Schema has `calendar_event_id` in reminders but no per-reminder streak field for recurring reminders
-
-**❌ Testing Gap:**
-- No unit, integration, or E2E tests exist (spec Section 14 requires all three)
+**Already correct in schema:**
+- PRAGMA foreign_keys = ON ✓
+- PRAGMA journal_mode = WAL ✓
+- Anchors table has `snoozed_to` and `tts_fallback` fields ✓
 
 **⚠️ Remaining Work - Backend Service Files:**
 
 *Phase 1 - Service Implementation (Not Started):*
-- Implement `chain_engine.py` per spec Section 2
-- Implement `voice_generator.py` per spec Section 4
-- Implement `message_templates.py` per spec Section 10
-- Implement `feedback_loop.py` per spec Section 11
-- Implement `stats_service.py` per spec Section 11
-- Create `audio_importer.py` - custom sound import (per spec Section 12)
+- Implement `chain_engine.py` per spec Section 2 — logic exists in test_server.py:138, needs extraction
+- Implement `voice_generator.py` per spec Section 4 — message generation in test_server.py:587, needs extraction
+- Implement `message_templates.py` per spec Section 10 — templates in test_server.py:373, needs extraction
+- Implement `feedback_loop.py` per spec Section 11 — drive_duration adjustment, NOT IMPLEMENTED
+- Implement `stats_service.py` per spec Section 11 — hit rate calculation exists in test_server.py:607, needs extraction
+- Create `audio_importer.py` - custom sound import (per spec Section 12) — DOES NOT EXIST
 
 *Phase 1 - Testing (Not Started):*
 - No unit tests exist - spec Section 14 requires tests
@@ -476,24 +450,27 @@ This document maps the specification requirements to implementation tasks, prior
 
 ## Known Gaps & Technical Debt
 
-### Schema Gaps (per spec Section 3.3 & 13.2)
-- **Reminder types:** Schema has `countdown_event` DEFAULT — spec requires explicit enum: `simple_countdown`, `morning_routine`, `standing_recurring` — need migration to add CHECK constraint
-- **Recurring reminders:** No `recurrence_rule` field in reminders table (spec Section 1.3, 3.3, 9.3 mentions standing/recurring with RRULE support)
-- **Streak tracking:** No persistent streak counter field in schema (spec Section 11.3) — can be computed from history
-- **Quiet hours:** Not persisted to `user_preferences` table (config in memory only)
-- **User preferences:** Has `key, value` but missing `updated_at` column per spec Section 13.2
+### Schema Gaps (per spec Section 3.3 & 13.2) - VERIFIED
 
-### Testing Gap (per spec Section 14)
-- **No tests directory exists** — spec Section 14 requires unit, integration, and E2E tests
-- No unit tests for chain engine, parser, adapters
-- No integration tests for reminder creation flow
-- No E2E tests (Detox) for mobile app
+**CONFIRMED - Migration 001 has issues that need migration 002 to fix:**
+- ❌ `user_preferences` table has only `key, value` - MISSING `updated_at` column
+- ❌ `reminders` table MISSING `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3 mentions RRULE support)
+- ❌ `calendar_sync` table has WRONG SCHEMA - stores EVENTS (id, calendar_id, event_id, event_title, event_location, event_start, event_end, sync_status) instead of SYNC STATE (`calendar_type PRIMARY KEY, last_sync_at, sync_token, is_connected`)
+- ❌ No CHECK constraint for `reminder_type` enum values (spec requires: countdown_event, simple_countdown, morning_routine, standing_recurring)
+- ❌ No CHECK constraint for `urgency_tier` enum values in anchors table
+
+### Testing Gap (per spec Section 14) - VERIFIED
+
+- ❌ No tests directory exists — spec Section 14 requires unit, integration, and E2E tests
+- ❌ No unit tests for chain engine, parser, adapters
+- ❌ No integration tests for reminder creation flow
+- ❌ No E2E tests (Detox) for mobile app
 - **Action needed:** Create `tests/` directory with:
   - `tests/unit/test_chain_engine.py` - TC-01 through TC-06
   - `tests/integration/test_reminder_flow.py` - full creation flow
   - `tests/e2e/*.spec.ts` - Detox tests
 
-### Missing Service Files (per spec Section 2-12)
+### Missing Service Files (per spec Section 2-12) - VERIFIED
 
 **These files MUST be created per spec sections:**
 - ⚠️ `src/backend/services/chain_engine.py` — chain logic in `src/test_server.py:138`, needs extraction per spec Section 2
@@ -503,17 +480,8 @@ This document maps the specification requirements to implementation tasks, prior
 - ⚠️ `src/backend/services/stats_service.py` — `calculate_hit_rate()` in `src/test_server.py:607`, needs extraction per spec Section 11
 - ❌ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 **DOES NOT EXIST**
 
-### Schema Gaps (per spec Section 13.2)
-
-**These columns/tables need migration:**
-- ❌ `user_preferences` table missing `updated_at` column (currently has only `key, value`)
-- ❌ `reminders` table missing `recurrence_rule` field for recurring reminders
-- ❌ `calendar_sync` table has WRONG SCHEMA - currently stores calendar EVENTS (id, event_id, event_title, etc.) but spec requires SYNC STATE (`sync_token`, `is_connected`, `last_sync_at`)
-- ❌ No CHECK constraint for `reminder_type` enum values (spec requires: `countdown_event`, `simple_countdown`, `morning_routine`, `standing_recurring`)
-- ❌ No CHECK constraint for `reminder_type` enum values
-
-### Other Technical Debt
-- TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
+### Other Technical Debt - VERIFIED
+- ⚠️ TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
 
 ---
 
