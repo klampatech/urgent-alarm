@@ -7,16 +7,16 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ❌ NOT STARTED | `src/backend/services/chain_engine.py` does NOT exist |
+| 2. Escalation Chain Engine | ⚠️ Partial | `compute_escalation_chain()` exists in `test_server.py` but NOT as separate `chain_engine.py` service |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `llm_adapter.py` |
-| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`tts_adapter.py`, `elevenlabs_adapter.py`), but `voice_generator.py` NOT created for message generation |
+| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`tts_adapter.py`, `elevenlabs_adapter.py`), voice message generation in `test_server.py` |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
 | 6. Background Scheduling | ✅ Complete | `src/backend/services/scheduler.py` - recovery scan, re-register, late fire logging |
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
-| 10. Voice Personality | ❌ NOT STARTED | `voice_generator.py` and `message_templates.py` do NOT exist |
-| 11. History & Stats | ❌ NOT STARTED | `stats_service.py` and `feedback_loop.py` do NOT exist |
+| 10. Voice Personality | ⚠️ Partial | Templates exist in `test_server.py` (5 personalities × 8 tiers × 3+ variations), but NOT as separate `voice_generator.py` / `message_templates.py` |
+| 11. History & Stats | ⚠️ Partial | `calculate_hit_rate()` exists in `test_server.py`, but `stats_service.py` and `feedback_loop.py` do NOT exist |
 | 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, `audio_importer.py` NOT created |
 | 13. Data Persistence | ⚠️ Partial | Schema has gaps - missing `updated_at` in user_preferences, no explicit reminder_type enum, no recurrence_rule field |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does NOT exist |
@@ -35,12 +35,17 @@ This document maps the specification requirements to implementation tasks, prior
 - Sound manager: `src/backend/services/sound_manager.py`
 - Reminder parser: `src/backend/services/reminder_parser.py`
 
+**⚠️ Currently Implemented (in `test_server.py` only, not as separate services):**
+- `compute_escalation_chain()` - chain logic in test_server.py, NOT extracted to `chain_engine.py`
+- `VOICE_PERSONALITIES` dict + `generate_voice_message()` - message generation in test_server.py, NOT extracted to `voice_generator.py` / `message_templates.py`
+- `calculate_hit_rate()` - stats in test_server.py, NOT extracted to `stats_service.py` / `feedback_loop.py`
+
 **❌ NOT IMPLEMENTED - Missing Service Files:**
-- `src/backend/services/chain_engine.py` — chain logic per spec Section 2
-- `src/backend/services/voice_generator.py` — message generation per spec Section 4, 10
-- `src/backend/services/message_templates.py` — templates per spec Section 10
-- `src/backend/services/feedback_loop.py` — drive_duration adjustment per spec Section 11
-- `src/backend/services/stats_service.py` — stats per spec Section 11
+- `src/backend/services/chain_engine.py` — extract chain logic from test_server.py
+- `src/backend/services/voice_generator.py` — extract message generation from test_server.py
+- `src/backend/services/message_templates.py` — extract templates from test_server.py
+- `src/backend/services/feedback_loop.py` — drive_duration adjustment (part of stats)
+- `src/backend/services/stats_service.py` — extract stats from test_server.py
 - `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12
 
 **⚠️ Schema Gaps (per spec Section 13.2):**
@@ -107,7 +112,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-> **Status:** ❌ NOT STARTED - `src/backend/services/chain_engine.py` does NOT exist
+> **Status:** ⚠️ PARTIAL - `compute_escalation_chain()` exists in `test_server.py` but needs extraction to `src/backend/services/chain_engine.py`
 > **Implementation approach:**
 > - Define `UrgencyTier` enum matching spec: calm, casual, pointed, urgent, pushing, firm, critical, alarm
 > - `compute_escalation_chain(arrival_time, drive_duration)` → list of Anchor objects
@@ -156,10 +161,10 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Status:** ❌ NOT STARTED - `voice_generator.py` and `message_templates.py` do NOT exist
+> **Status:** ⚠️ PARTIAL - Templates and `generate_voice_message()` exist in `test_server.py`, need extraction to `src/backend/services/voice_generator.py` and `src/backend/services/message_templates.py`
 > **Implementation approach:**
 > - `voice_generator.py`: Generate messages given personality + urgency_tier + destination
-> - `message_templates.py`: 5 personalities × 8 tiers × 3+ variations
+> - `message_templates.py`: 5 personalities × 8 tiers × 3+ variations (currently in test_server.py)
 > - Personality options: Coach, Assistant, Best Friend, No-nonsense, Calm
 > - Custom mode: max 200 char user prompt appended to system prompt
 > - Store `voice_personality` in user_preferences, apply to new reminders
@@ -190,7 +195,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 7 test scenarios pass
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
 
-> **Status:** ❌ NOT STARTED - `stats_service.py` and `feedback_loop.py` do NOT exist
+> **Status:** ⚠️ PARTIAL - `calculate_hit_rate()` exists in `test_server.py`, needs extraction to `src/backend/services/stats_service.py` and `src/backend/services/feedback_loop.py`
 > **Implementation approach:**
 > - `stats_service.py`: Compute from history table
 >   - `get_hit_rate(days=7)`: hits / (hits + misses) * 100
@@ -295,6 +300,18 @@ This document maps the specification requirements to implementation tasks, prior
 > - Store in app sandbox, reference in `custom_sounds` table
 > - Validate format, transcode to normalized format
 > - Fallback to category default on corrupted file
+
+#### 14. Schema: Add Missing Columns [PENDING]
+**Spec Ref:** Section 13.2
+**Task:** Add missing schema columns via migration
+- Add `updated_at` column to `user_preferences` table
+- Add `recurrence_rule` field to `reminders` table for recurring reminders
+- Add `sync_token` and `is_connected` columns to `calendar_sync` table
+- Add CHECK constraint for `reminder_type` enum values
+- **Acceptance Criteria:** Migration applies cleanly, schema matches spec
+**Files:** `src/backend/database/migrations/002_schema_fixes.sql`
+
+> **Status:** ❌ NOT STARTED - Schema has gaps per spec Section 13.2
 
 ---
 
@@ -476,12 +493,20 @@ This document maps the specification requirements to implementation tasks, prior
 ### Missing Service Files (per spec Section 2-12)
 
 **These files MUST be created per spec sections:**
-- ❌ `src/backend/services/chain_engine.py` — chain logic per spec Section 2 **DOES NOT EXIST**
-- ❌ `src/backend/services/voice_generator.py` — message generation per spec Section 4, 10 **DOES NOT EXIST**
-- ❌ `src/backend/services/message_templates.py` — message templates per spec Section 10 **DOES NOT EXIST**
-- ❌ `src/backend/services/feedback_loop.py` — drive_duration adjustment per spec Section 11 **DOES NOT EXIST**
-- ❌ `src/backend/services/stats_service.py` — stats per spec Section 11 (hit_rate, streak, common_miss_window) **DOES NOT EXIST**
+- ⚠️ `src/backend/services/chain_engine.py` — chain logic in `test_server.py`, needs extraction per spec Section 2
+- ⚠️ `src/backend/services/voice_generator.py` — message generation in `test_server.py`, needs extraction per spec Section 4, 10
+- ⚠️ `src/backend/services/message_templates.py` — templates in `test_server.py`, needs extraction per spec Section 10
+- ⚠️ `src/backend/services/feedback_loop.py` — drive_duration adjustment in `test_server.py`, needs extraction per spec Section 11
+- ⚠️ `src/backend/services/stats_service.py` — stats in `test_server.py`, needs extraction per spec Section 11
 - ❌ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 **DOES NOT EXIST**
+
+### Schema Gaps (per spec Section 13.2)
+
+**These columns/tables need migration:**
+- ❌ `user_preferences` table missing `updated_at` column
+- ❌ `reminders` table missing `recurrence_rule` field for recurring reminders
+- ❌ `calendar_sync` table missing `sync_token` and `is_connected` columns
+- ❌ No CHECK constraint for `reminder_type` enum values
 
 ### Other Technical Debt
 - TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
@@ -491,14 +516,14 @@ This document maps the specification requirements to implementation tasks, prior
 ## Dependency Map
 
 ```
-Phase 1 (Foundation) - PARTIALLY COMPLETE - Service Files NOT STARTED
+Phase 1 (Foundation) - PARTIALLY COMPLETE - Some logic in test_server.py
 ├── 1. Database Migration System ✅
-├── 2. Chain Engine + get_next_unfired_anchor ❌ (not implemented)
+├── 2. Chain Engine ⚠️ (logic in test_server.py, needs extraction to chain_engine.py)
 ├── 3. LLM Adapter Interface + Mock ✅
 ├── 4. Reminder Parser Integration ✅
-├── 5. Voice Personality Variations ❌ (not implemented)
+├── 5. Voice Personality Variations ⚠️ (templates in test_server.py, needs extraction)
 ├── 6. TTS Adapter + Mock ✅
-├── 7. History/Stats/Feedback Loop ❌ (not implemented)
+├── 7. History/Stats/Feedback Loop ⚠️ (calculate_hit_rate in test_server.py, needs extraction)
 └── 8. Snooze/Dismissal Flow ✅
 
 Phase 2 (Backend Services) - MOSTLY COMPLETE
@@ -521,7 +546,7 @@ Phase 3 (Frontend) - NOT STARTED
 Phase 4 (Testing & Schema) - NOT STARTED
 ├── 22. Unit Tests (depends on phases 1-2 service extraction)
 ├── 23. Integration Tests (depends on 22)
-├── 24. Schema Migration: Reminder Types (depends on phase 1)
+├── 24. Schema Migration (add missing columns)
 └── 25. E2E Tests (depends on phase 3)
 ```
 
@@ -529,9 +554,9 @@ Phase 4 (Testing & Schema) - NOT STARTED
 
 ## Quick Start
 
-**Backend is partially complete.** Missing service files must be implemented before Phase 3 (Mobile App):
+**Backend is partially complete.** Some logic exists in test_server.py but needs extraction to separate service files per spec. Missing files must be implemented before Phase 3 (Mobile App):
 
-1. **Week 5:** Implement missing service files (chain_engine, voice_generator, message_templates, feedback_loop, stats_service, audio_importer)
+1. **Week 5:** Extract service files from test_server.py (chain_engine, voice_generator, message_templates, feedback_loop, stats_service) + create audio_importer.py
 2. **Week 6:** Initialize React Native project (Task 14)
 3. **Week 6-7:** Build UI screens and navigation (Tasks 15-19)
 4. **Week 8:** Calendar and Sound Library UI (Tasks 20-21)
