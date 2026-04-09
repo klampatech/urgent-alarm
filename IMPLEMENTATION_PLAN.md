@@ -71,8 +71,8 @@ This document maps the specification requirements to implementation tasks, prior
 - No E2E tests (Detox)
 
 *Technical Debt (Refactoring Needed):*
-- `src/test_server.py` is a monolithic 600+ line proof-of-concept — needs refactoring into proper service modules
-- TTS cache cleanup not automated
+- `src/test_server.py` is a monolithic 882-line proof-of-concept — needs refactoring into proper service modules
+- TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
 
 ---
 
