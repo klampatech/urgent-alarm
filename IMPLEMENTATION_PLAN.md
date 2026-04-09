@@ -23,6 +23,11 @@ This document maps the specification requirements to implementation tasks, prior
 
 > **Verification Notes (2026-04-09):** All gap analysis entries verified by code inspection.
 > **Updated (2026-04-09):** Re-verified all gaps against current codebase — plan accurately reflects current state. No new gaps identified. Tests/ directory still does not exist.
+> **Re-verified (2026-04-09):** Code exploration confirms:
+> - `tests/` directory: NOT existing (verified: no files match `tests/**/*.py`)
+> - `src/backend/services/`: 6 files (reminder_parser, snooze_handler, dismissal_handler, scheduler, notification_manager, sound_manager) — missing chain_engine, voice_generator, message_templates, feedback_loop, stats_service
+> - `src/backend/adapters/`: 11 files — missing audio_importer.py
+> - test_server.py: contains chain logic (line 138-214), VOICE_PERSONALITIES (373-584), generate_voice_message (587-603), calculate_hit_rate (607-626)
 > - `src/backend/services/` contains: reminder_parser.py, snooze_handler.py, dismissal_handler.py, scheduler.py, notification_manager.py, sound_manager.py (6 files)
 > - `src/backend/adapters/` contains 11 files (llm, minimax, mock_llm, tts, elevenlabs, mock_tts, calendar, apple_calendar, google_calendar, location)
 > - `test_server.py` verified with chain logic (line 138-214), VOICE_PERSONALITIES (line 373-584), generate_voice_message (587-603), calculate_hit_rate (607-626)
