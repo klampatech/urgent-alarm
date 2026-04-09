@@ -477,14 +477,14 @@ This document maps the specification requirements to implementation tasks, prior
 ### Missing Service Files (per spec Section 2-12) - VERIFIED
 
 **These files MUST be created per spec sections:**
-- ⚠️ `src/backend/services/chain_engine.py` — NOT IMPLEMENTED, needs creation per spec Section 2
-- ⚠️ `src/backend/services/voice_generator.py` — message generation in `src/test_server.py:590`, needs extraction per spec Section 4, 10
-- ⚠️ `src/backend/services/message_templates.py` — templates in `src/test_server.py:373`, needs extraction per spec Section 10
+- ⚠️ `src/backend/services/chain_engine.py` — logic at `src/test_server.py:138`, needs extraction per spec Section 2
+- ⚠️ `src/backend/services/voice_generator.py` — message generation at `src/test_server.py:587`, needs extraction per spec Section 4, 10
+- ⚠️ `src/backend/services/message_templates.py` — templates at `src/test_server.py:373`, needs extraction per spec Section 10
 - ⚠️ `src/backend/services/feedback_loop.py` — NOT IMPLEMENTED, needs creation per spec Section 11
-- ⚠️ `src/backend/services/stats_service.py` — NOT IMPLEMENTED, needs creation per spec Section 11
+- ⚠️ `src/backend/services/stats_service.py` — logic at `src/test_server.py:607`, needs extraction per spec Section 11
 - ❌ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 **DOES NOT EXIST**
 
-### Other Technical Debt - VERIFIED
+### TTS Cache Cleanup - VERIFIED
 - ⚠️ TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
 
 ---
