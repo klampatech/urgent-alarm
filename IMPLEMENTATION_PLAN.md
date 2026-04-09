@@ -7,7 +7,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ❌ NOT STARTED | Logic exists in `src/test_server.py:138-162` but NOT extracted to `chain_engine.py` |
+| 2. Escalation Chain Engine | ❌ NOT STARTED | Logic exists in `src/test_server.py:138-214` but NOT extracted to `chain_engine.py` |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `src/backend/adapters/llm_adapter.py` |
 | 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`src/backend/adapters/tts_adapter.py`, `elevenlabs_adapter.py`), message generation in `test_server.py:587-603` NOT extracted to voice_generator.py |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` |
@@ -17,52 +17,70 @@ This document maps the specification requirements to implementation tasks, prior
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
 | 10. Voice Personality | ⚠️ Partial | Templates in `src/test_server.py:373-584` (VOICE_PERSONALITIES dict), NOT extracted to message_templates.py |
 | 11. History & Stats | ⚠️ Partial | `calculate_hit_rate()` in `src/test_server.py:607-626`, NOT extracted to stats_service.py; feedback_loop.py NOT IMPLEMENTED |
-| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists (`src/backend/services/sound_manager.py`), `audio_importer.py` NOT created |
+| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, `audio_importer.py` NOT created |
 | 13. Data Persistence | ⚠️ Partial | Schema has gaps per verified analysis below |
 | 14. Definition of Done | ❌ NOT STARTED | Tests directory does NOT exist |
 
+### Verified Missing Files (Phase 1 Backend Services)
+
+**Currently NOT in src/backend/services/:**
+- ❌ `chain_engine.py` — logic at test_server.py:138-214 compute_escalation_chain(), validate_chain()
+- ❌ `voice_generator.py` — logic at test_server.py:587-603 generate_voice_message()
+- ❌ `message_templates.py` — templates at test_server.py:373-584 (VOICE_PERSONALITIES dict)
+- ❌ `feedback_loop.py` — NOT IMPLEMENTED
+- ❌ `stats_service.py` — logic at test_server.py:607-626 calculate_hit_rate(), NOT extracted
+
+**Currently NOT in src/backend/adapters/:**
+- ❌ `audio_importer.py` — per spec Section 12, NOT CREATED
+
 ### Verified Schema Gaps (per spec Section 13.2)
 
-**Migration file 001_initial_schema.sql has CORRECT base schema but MISSING constraints/fields:**
-- ⚠️ `calendar_sync` table stores EVENT data (OK for v1) — spec may want sync state separate, but current design works
+**Migration file 001_initial_schema.sql has CORRECT base schema but MISSING:**
+- ⚠️ `user_preferences` table is a simple key-value store (spec may want structured columns, but key-value works for v1)
+- ✅ Has all spec-required fields: origin_lat, origin_lng, origin_address, calendar_event_id, custom_sound_path
+- ⚠️ `calendar_sync` table stores EVENT data (OK for v1) — spec may want sync state separate
+
+**Schema gaps requiring new migration (002) per verified spec Section 13.2:**
 - ❌ `user_preferences` table missing `updated_at` column (spec Section 13.2 requires it)
 - ❌ No `recurrence_rule` field in reminders table for recurring reminders (spec Section 3.3)
-- ❌ No CHECK constraints for `reminder_type` enum values (countdown_event | simple_countdown | morning_routine | standing_recurring)
-- ❌ No CHECK constraints for `urgency_tier` enum values (calm | casual | pointed | urgent | pushing | firm | critical | alarm)
-- ⚠️ `calendar_sync` table missing `sync_token` and `is_connected` columns (spec Section 13.2)
+- ❌ No `sync_token` column in `calendar_sync` table (spec Section 13.2)
+- ❌ No `is_connected` column in `calendar_sync` table (spec Section 13.2)
+- ⚠️ No CHECK constraints for `reminder_type` enum values (SQLite supports CHECK but not enforced)
+- ⚠️ No CHECK constraints for `urgency_tier` enum values (SQLite supports CHECK but not enforced)
 
-**Schema gaps requiring new migration (002):**
-- Add `updated_at` column to `user_preferences` table
-- Add `recurrence_rule` field to `reminders` table for recurring reminders (spec Section 3.3)
-- Add `sync_token` column to `calendar_sync` table
-- Add `is_connected` column to `calendar_sync` table
-- Add CHECK constraints for `reminder_type` enum values (countdown_event | simple_countdown | morning_routine | standing_recurring)
-- Add CHECK constraints for `urgency_tier` enum values (calm | casual | pointed | urgent | pushing | firm | critical | alarm)
+**Migration 002 required to add:**
+```sql
+ALTER TABLE user_preferences ADD COLUMN updated_at TEXT;
+ALTER TABLE reminders ADD COLUMN recurrence_rule TEXT;
+ALTER TABLE calendar_sync ADD COLUMN sync_token TEXT;
+ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
+```
 
 **⚠️ Remaining Work - Backend Service Files:**
 
-*Phase 1 - Service Implementation (Not Started):*
-- Implement `chain_engine.py` per spec Section 2 — needs creation (logic at test_server.py:138 per git history)
-- Implement `voice_generator.py` per spec Section 4, 10 — message generation NOT extracted
-- Implement `message_templates.py` per spec Section 10 — templates in test_server.py:373, needs extraction
-- Implement `feedback_loop.py` per spec Section 11 — NOT IMPLEMENTED
-- Implement `stats_service.py` per spec Section 11 — calculate_hit_rate() at test_server.py:607, needs extraction
-- Create `audio_importer.py` - custom sound import (per spec Section 12) — DOES NOT EXIST
+*Phase 1 - Service Implementation (Not Started, files DO NOT exist):*
+- ❌ `chain_engine.py` — per spec Section 2, needs creation from test_server.py:138-214
+- ❌ `voice_generator.py` — per spec Section 4, 10, needs creation from test_server.py:587-603
+- ❌ `message_templates.py` — per spec Section 10, needs extraction from test_server.py:373-584
+- ❌ `feedback_loop.py` — per spec Section 11, NOT IMPLEMENTED anywhere
+- ❌ `stats_service.py` — per spec Section 11, needs extraction from test_server.py:607-626
+- ❌ `audio_importer.py` — per spec Section 12, NOT CREATED anywhere
 
 *Phase 1 - Testing (Not Started):*
-- No unit tests exist - spec Section 14 requires tests
-- No integration tests implemented
+- No tests/ directory exists
+- No unit tests (spec Section 14 requires)
+- No integration tests
 - No E2E tests (Detox)
 
 *Phase 2 - Mobile App (Not Started):*
-- React Native project setup
-- Quick Add interface
-- Reminders list & management
-- Active alarm screen
-- Settings & preferences
-- History & stats screen
-- Calendar tab
-- Sound library UI
+- ❌ React Native project setup
+- ❌ Quick Add interface
+- ❌ Reminders list & management
+- ❌ Active alarm screen
+- ❌ Settings & preferences
+- ❌ History & stats screen
+- ❌ Calendar tab
+- ❌ Sound library UI
 
 ---
 
@@ -93,15 +111,17 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-> **Status:** ⚠️ **VERIFIED GAP** - Chain engine logic NOT implemented in separate service file, needs creation per spec Section 2
+> **Status:** ⚠️ **VERIFIED GAP** - Logic at `test_server.py:138-214` NOT extracted to separate service file per spec Section 2
 > **Implementation approach:**
+> - Create `src/backend/services/chain_engine.py`
 > - Define `UrgencyTier` enum matching spec: calm, casual, pointed, urgent, pushing, firm, critical, alarm
-> - `compute_escalation_chain(arrival_time, drive_duration)` → list of Anchor objects
+> - `compute_escalation_chain(arrival_time, drive_duration)` → list of Anchor objects (line 138)
+> - `validate_chain(arrival_time, drive_duration)` → validation dict (line 217)
+> - `get_next_unfired_anchor(reminder_id)` → next unfired anchor (line 227)
 > - Buffer ≥25 min: 8 anchors (full chain)
 > - Buffer 10-24 min: 5 anchors (skip calm/casual, start at urgent)
 > - Buffer ≤5 min: 3 anchors (firm, critical, alarm)
-> - `validate_chain()`: reject if drive_duration > (arrival_time - now)
-> - `get_next_unfired_anchor(reminder_id)`: returns earliest unfired anchor sorted by timestamp
+> - Implement TC-01 through TC-06 unit tests
 
 #### 3. LLM Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 3.3, 3.4, 3.5
@@ -142,10 +162,11 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Status:** ⚠️ **VERIFIED GAP** - Templates exist in `src/test_server.py:373-584` (VOICE_PERSONALITIES dict), `generate_voice_message()` in `src/test_server.py:587-603`, need extraction to dedicated service files
+> **Status:** ⚠️ **VERIFIED GAP** - `VOICE_PERSONALITIES` dict at test_server.py:373-584, `generate_voice_message()` at test_server.py:587-603, NOT extracted to dedicated service files
 > **Implementation approach:**
-> - `voice_generator.py`: Generate messages given personality + urgency_tier + destination
-> - `message_templates.py`: 5 personalities × 8 tiers × 3+ variations (currently in test_server.py:373)
+> - Create `src/backend/services/message_templates.py` — extract VOICE_PERSONALITIES dict (line 373)
+> - Create `src/backend/services/voice_generator.py` — extract generate_voice_message() (line 587)
+> - 5 personalities × 8 tiers × 3+ variations per spec Section 10.3
 > - Personality options: Coach, Assistant, Best Friend, No-nonsense, Calm
 > - Custom mode: max 200 char user prompt appended to system prompt
 > - Store `voice_personality` in user_preferences, apply to new reminders
@@ -176,7 +197,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 7 test scenarios pass
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
 
-> **Status:** ❌ **NOT STARTED** - `calculate_hit_rate()` exists in `test_server.py:607`, needs extraction to `src/backend/services/stats_service.py`; `feedback_loop.py` NOT created; No tests exist (spec Section 14 requires tests)
+> **Status:** ⚠️ **VERIFIED GAP** - `calculate_hit_rate()` at test_server.py:607-626 needs extraction; `feedback_loop.py` NOT IMPLEMENTED anywhere
 > **Implementation approach:**
 > - `stats_service.py`: Compute from history table
 >   - `get_hit_rate(days=7)`: hits / (hits + misses) * 100
