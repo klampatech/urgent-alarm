@@ -33,7 +33,7 @@ This document maps the specification requirements to implementation tasks, prior
 - Location adapter (500m geofence, single-point check)
 - Snooze/Dismissal handlers
 - Sound manager (built-in + custom import)
-- Voice personality system with 3+ variations per tier
+- Voice personality system with 5 personalities and 3+ variations per tier
 
 **❌ Remaining Work:**
 
@@ -48,16 +48,17 @@ This document maps the specification requirements to implementation tasks, prior
 - Sound library UI
 
 *Phase 4 - Testing (Not Started):*
-- Integration tests
-- E2E tests (Detox)
+- No unit tests exist for backend services (spec Section 14 requires tests)
+- No integration tests implemented
+- No E2E tests (Detox)
 
 *Schema Gaps:*
-- Recurring reminders: No `recurrence_rule` field (spec mentions standing/recurring)
-- Streak tracking: Calculated but persistence model incomplete
+- Reminder types: Only countdown_event supported - **missing simple_countdown, morning_routine, standing_recurring** per spec Section 3.3
+- Recurring reminders: No `recurrence_rule` field (spec Section 1.3, 3.3, 9.3 mentions standing/recurring)
+- Streak tracking: Persistence model incomplete for recurring reminder streaks
 
 *Technical Debt:*
-- `src/test_server.py` monolithic proof-of-concept needs refactoring
-- No unit tests for backend services
+- `src/test_server.py` is a monolithic 600+ line proof-of-concept — needs refactoring into proper service modules
 - TTS cache cleanup not automated
 
 ---
@@ -382,22 +383,19 @@ This document maps the specification requirements to implementation tasks, prior
 ## Known Gaps & Technical Debt
 
 ### Schema Gaps
-- **Recurring reminders:** No `recurrence_rule` field in reminders table (spec Section 1.3 mentions standing/recurring reminders)
-- **Streak tracking:** Stats service calculates but persistence model incomplete
-
-### Missing Features (Not in Mobile App)
-- Morning routine templates (spec Section 1.3)
-- Standing/recurring reminder support
-- Custom prompt mode (200 char max) in UI
+- **Reminder types:** Schema only supports `countdown_event` — missing `simple_countdown`, `morning_routine`, `standing_recurring` per spec Section 3.3
+- **Recurring reminders:** No `recurrence_rule` field in reminders table (spec Section 1.3, 3.3, 9.3 mentions standing/recurring with RRULE support)
+- **Streak tracking:** Stats calculated at query time but no persistent streak counter for recurring reminders
 
 ### Backend Test Coverage
-- No unit tests exist for chain engine, parser, or services
+- No unit tests exist for chain engine, parser, or services (spec Section 14 requires tests)
 - Integration tests not implemented
-- Need test fixtures for LLM and TTS adapters
+- E2E tests not implemented
 
 ### Technical Debt
-- `src/test_server.py` is a monolithic proof-of-concept (628 lines) — needs refactoring into proper service modules
-- TTS cache directory not cleaned up automatically
+- `src/test_server.py` is a monolithic 600+ line proof-of-concept — needs refactoring into proper service modules
+- TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
+- No unit tests for chain engine test scenarios (TC-01 through TC-06)
 
 ---
 
