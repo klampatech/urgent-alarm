@@ -21,7 +21,12 @@ This document maps the specification requirements to implementation tasks, prior
 | 13. Data Persistence | ⚠️ Partial | Schema has gaps per verified analysis below; 001_initial_schema.sql verified at `src/backend/database/migrations/001_initial_schema.sql` |
 | 14. Definition of Done | ❌ NOT STARTED | tests/ directory does NOT exist (verified: `glob tests/**/*.py` returned no files) |
 
-> **Verification Notes (2026-04-09):** All gap analysis entries verified by code inspection. `src/backend/services/` contains: reminder_parser.py, snooze_handler.py, dismissal_handler.py, scheduler.py, notification_manager.py, sound_manager.py. Missing: chain_engine.py, voice_generator.py, message_templates.py, feedback_loop.py, stats_service.py. `src/backend/adapters/` contains 11 files. Missing: audio_importer.py. **Verified 2026-04-09:** `test_server.py` exists at `src/test_server.py` with compute_escalation_chain at line 138, VOICE_PERSONALITIES at line 373. `tests/` directory does NOT exist.
+> **Verification Notes (2026-04-09):** All gap analysis entries verified by code inspection.
+> - `src/backend/services/` contains: reminder_parser.py, snooze_handler.py, dismissal_handler.py, scheduler.py, notification_manager.py, sound_manager.py (6 files)
+> - `src/backend/adapters/` contains 11 files (llm, minimax, mock_llm, tts, elevenlabs, mock_tts, calendar, apple_calendar, google_calendar, location)
+> - `test_server.py` verified with chain logic (line 138-214), VOICE_PERSONALITIES (line 373-584), generate_voice_message (587-603), calculate_hit_rate (607-626)
+> - **tests/ directory verified NOT existing (glob returned no files)**
+> - **Schema verified:** 001_initial_schema.sql exists but missing `updated_at` in user_preferences table per spec Section 13.2
 
 ### Verified Missing Files (Phase 1 Backend Services)
 
@@ -43,10 +48,9 @@ This document maps the specification requirements to implementation tasks, prior
 - ⚠️ `calendar_sync` table stores EVENT data (OK for v1) — spec may want sync state separate
 
 **Schema gaps requiring new migration (002) per verified spec Section 13.2:**
-- ❌ `user_preferences` table missing `updated_at` column (spec Section 13.2 requires it)
-- ❌ No `recurrence_rule` field in reminders table for recurring reminders (spec Section 3.3)
-- ❌ No `sync_token` column in `calendar_sync` table (spec Section 13.2)
-- ❌ No `is_connected` column in `calendar_sync` table (spec Section 13.2)
+- ❌ `user_preferences` table MISSING `updated_at` column — verified in 001_initial_schema.sql (line 74-77)
+- ❌ `reminders` table MISSING `recurrence_rule` field for recurring reminders (spec Section 3.3)
+- ⚠️ `calendar_sync` table STRUCTURE DOES NOT MATCH spec — stores event data, not sync state
 - ⚠️ No CHECK constraints for `reminder_type` enum values (SQLite supports CHECK but not enforced)
 - ⚠️ No CHECK constraints for `urgency_tier` enum values (SQLite supports CHECK but not enforced)
 
