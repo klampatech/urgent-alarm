@@ -7,7 +7,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ❌ NOT STARTED | No chain_engine.py exists - needs creation per spec Section 2 |
+| 2. Escalation Chain Engine | ❌ NOT STARTED | `src/backend/services/chain_engine.py` does NOT exist |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `llm_adapter.py` |
 | 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist, but voice_generator.py NOT created |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
@@ -15,43 +15,42 @@ This document maps the specification requirements to implementation tasks, prior
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
-| 10. Voice Personality | ❌ NOT STARTED | No voice_generator.py or message_templates.py created per spec Section 10 |
-| 11. History & Stats | ❌ NOT STARTED | No stats_service.py or feedback_loop.py created per spec Section 11 |
-| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, `audio_importer.py` NOT created per spec Section 12 |
-| 13. Data Persistence | ⚠️ Partial | Schema exists but missing `recurrence_rule` in reminders, streak counter, user_preferences `updated_at` |
-| 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does not exist |
+| 10. Voice Personality | ❌ NOT STARTED | `voice_generator.py` and `message_templates.py` do NOT exist |
+| 11. History & Stats | ❌ NOT STARTED | `stats_service.py` and `feedback_loop.py` do NOT exist |
+| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, `audio_importer.py` NOT created |
+| 13. Data Persistence | ⚠️ Partial | Schema exists but missing `reminder_type` enum values, `recurrence_rule`, `updated_at` in user_preferences |
+| 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does NOT exist |
 
 ### Current Implementation Status
 
-**✅ Backend Services Implemented (Phases 1-2 - MOSTLY COMPLETE):**
-- SQLite with 7 tables: reminders, anchors, history, destination_adjustments, user_preferences, custom_sounds, calendar_sync (schema complete)
-- LLM adapter interface + MiniMax + Mock implementations ✅
-- TTS adapter interface + ElevenLabs + Mock implementations ✅
-- Notification manager (tier sounds, DND, quiet hours, chain overlap) ✅
-- Scheduler (recovery scan, re-register, late fire logging) ✅
-- Calendar adapters (Apple + Google) ✅
-- Location adapter (500m geofence, single-point check) ✅
-- Snooze/Dismissal handlers ✅
-- Sound manager (built-in + custom import stub) ⚠️
+**✅ Backend Services Implemented:**
+- SQLite with schema in `src/backend/database/migrations/001_initial_schema.sql`
+- LLM adapter interface + MiniMax + Mock: `src/backend/adapters/llm_adapter.py`, `minimax_adapter.py`, `mock_llm.py`
+- TTS adapter interface + ElevenLabs + Mock: `src/backend/adapters/tts_adapter.py`, `elevenlabs_adapter.py`, `mock_tts.py`
+- Notification manager: `src/backend/services/notification_manager.py`
+- Scheduler: `src/backend/services/scheduler.py`
+- Calendar adapters: `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py`
+- Location adapter: `src/backend/adapters/location_adapter.py`
+- Snooze/Dismissal handlers: `src/backend/services/snooze_handler.py`, `dismissal_handler.py`
+- Sound manager: `src/backend/services/sound_manager.py`
+- Reminder parser: `src/backend/services/reminder_parser.py`
 
 **❌ NOT IMPLEMENTED - Missing Service Files:**
-- ❌ No `chain_engine.py` — chain logic per spec Section 2 NOT STARTED
-- ❌ No `voice_generator.py` — message generation per spec Section 4 NOT STARTED
-- ❌ No `message_templates.py` — message templates per spec Section 10 NOT STARTED
-- ❌ No `feedback_loop.py` — drive_duration adjustment logic per spec Section 11 NOT STARTED
-- ❌ No `stats_service.py` — stats logic per spec Section 11 (hit_rate, streak, common_miss_window) NOT STARTED
-- ❌ No `audio_importer.py` — custom sound import per spec Section 12 NOT STARTED
+- `src/backend/services/chain_engine.py` — chain logic per spec Section 2
+- `src/backend/services/voice_generator.py` — message generation per spec Section 4, 10
+- `src/backend/services/message_templates.py` — templates per spec Section 10
+- `src/backend/services/feedback_loop.py` — drive_duration adjustment per spec Section 11
+- `src/backend/services/stats_service.py` — stats per spec Section 11
+- `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12
 
 **⚠️ Schema Gaps (per spec Section 3.3 & 13.2):**
-- `reminder_type`: Schema has `countdown_event` DEFAULT. **Missing explicit enum values:** `simple_countdown`, `morning_routine`, `standing_recurring`
-- No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3) — NOT IN SCHEMA
-- No persistent streak counter for recurring reminders (spec Section 11.3) — NOT IN SCHEMA
-- Quiet hours not persisted to user_preferences table (config in memory only)
-- user_preferences table missing `updated_at` column (spec Section 13.2)
+- `reminder_type`: Schema has `countdown_event` DEFAULT - missing explicit enum values: `simple_countdown`, `morning_routine`, `standing_recurring`
+- No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3)
+- Quiet hours not persisted to user_preferences table
+- `user_preferences` table missing `updated_at` column (spec Section 13.2)
 
 **❌ Testing Gap:**
 - No unit, integration, or E2E tests exist (spec Section 14 requires all three)
-- No `tests/` directory created
 
 **⚠️ Remaining Work - Backend Service Files:**
 
@@ -107,7 +106,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-> **Status:** ❌ NOT STARTED - No chain_engine.py exists, must implement per spec Section 2
+> **Status:** ❌ NOT STARTED - `src/backend/services/chain_engine.py` does NOT exist
 > **Implementation approach:**
 > - Define `UrgencyTier` enum matching spec: calm, casual, pointed, urgent, pushing, firm, critical, alarm
 > - `compute_escalation_chain(arrival_time, drive_duration)` → list of Anchor objects
@@ -156,7 +155,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Status:** ❌ NOT STARTED - voice_generator.py and message_templates.py do not exist, must implement per spec Section 10
+> **Status:** ❌ NOT STARTED - `voice_generator.py` and `message_templates.py` do NOT exist
 > **Implementation approach:**
 > - `voice_generator.py`: Generate messages given personality + urgency_tier + destination
 > - `message_templates.py`: 5 personalities × 8 tiers × 3+ variations
@@ -190,7 +189,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 7 test scenarios pass
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
 
-> **Status:** ❌ NOT STARTED - stats_service.py and feedback_loop.py do not exist, must implement per spec Section 11
+> **Status:** ❌ NOT STARTED - `stats_service.py` and `feedback_loop.py` do NOT exist
 > **Implementation approach:**
 > - `stats_service.py`: Compute from history table
 >   - `get_hit_rate(days=7)`: hits / (hits + misses) * 100
@@ -288,7 +287,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/sound_manager.py`, `src/backend/adapters/audio_importer.py`
 
-> **Status:** ❌ NOT STARTED - `sound_manager.py` exists, `audio_importer.py` NOT YET CREATED. Note: Built-in sounds stub exists in sound_manager.py, actual audio files not included
+> **Status:** ❌ NOT STARTED - `sound_manager.py` EXISTS but `audio_importer.py` does NOT exist
 > **Implementation approach:**
 > - `audio_importer.py`: Import custom audio files (MP3, WAV, M4A)
 > - Max duration: 30 seconds
@@ -476,12 +475,12 @@ This document maps the specification requirements to implementation tasks, prior
 ### Missing Service Files (per spec Section 2-12)
 
 **These files MUST be created per spec sections:**
-- ❌ `src/backend/services/chain_engine.py` — chain logic per spec Section 2 **NOT STARTED**
-- ❌ `src/backend/services/voice_generator.py` — message generation per spec Section 4 **NOT STARTED**
-- ❌ `src/backend/services/message_templates.py` — message templates per spec Section 10 **NOT STARTED**
-- ❌ `src/backend/services/feedback_loop.py` — drive_duration adjustment per spec Section 11 **NOT STARTED**
-- ❌ `src/backend/services/stats_service.py` — stats per spec Section 11 (hit_rate, streak, common_miss_window) **NOT STARTED**
-- ❌ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 **NOT STARTED**
+- ❌ `src/backend/services/chain_engine.py` — chain logic per spec Section 2 **DOES NOT EXIST**
+- ❌ `src/backend/services/voice_generator.py` — message generation per spec Section 4, 10 **DOES NOT EXIST**
+- ❌ `src/backend/services/message_templates.py` — message templates per spec Section 10 **DOES NOT EXIST**
+- ❌ `src/backend/services/feedback_loop.py` — drive_duration adjustment per spec Section 11 **DOES NOT EXIST**
+- ❌ `src/backend/services/stats_service.py` — stats per spec Section 11 (hit_rate, streak, common_miss_window) **DOES NOT EXIST**
+- ❌ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 **DOES NOT EXIST**
 
 ### Other Technical Debt
 - TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
