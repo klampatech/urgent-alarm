@@ -28,6 +28,7 @@ This document maps the specification requirements to implementation tasks, prior
 > - `test_server.py` verified with chain logic (line 138-214), VOICE_PERSONALITIES (line 373-584), generate_voice_message (587-603), calculate_hit_rate (607-626)
 > - **tests/ directory verified NOT existing (glob returned no files)**
 > - **Schema verified:** 001_initial_schema.sql exists but missing `updated_at` in user_preferences table per spec Section 13.2
+> - **(2026-04-09) Task 22 IN PROGRESS:** Creating tests/ directory structure for unit tests
 
 ### Verified Missing Files (Phase 1 Backend Services)
 
@@ -430,10 +431,11 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 
 ### P0 — Critical Path
 
-#### 22. Unit Tests [PENDING]
-**Status:** ❌ NOT STARTED — No unit tests exist, tests/ directory does not exist
+#### 22. Unit Tests [IN PROGRESS]
+**Status:** ⚠️ In Progress — Creating tests/ directory structure and initial tests
 **Spec Ref:** Section 14
 **Task:** Write unit tests for backend services
+- Create `tests/` directory with `tests/unit/` subdirectories
 - Chain engine determinism tests (TC-01 through TC-06)
 - Parser fixtures and keyword extraction tests
 - TTS adapter mock tests
@@ -442,7 +444,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 **Acceptance Criteria:** All unit tests pass
 **Files:** `tests/unit/test_chain_engine.py`, `tests/unit/test_reminder_parser.py`, `tests/unit/test_tts_adapter.py`, `tests/unit/test_llm_adapter.py`
 
-> **Status:** ❌ NOT STARTED - spec Section 14 requires tests for all acceptance criteria. No tests directory exists.
+> **Status:** ⚠️ Started 2026-04-09 — Creating tests/ directory and writing unit tests for chain engine
 
 #### 23. Integration Tests [PENDING]
 **Status:** ❌ NOT STARTED
