@@ -37,6 +37,7 @@ This document maps the specification requirements to implementation tasks, prior
 > **(2026-04-09 14:35) REFINED:** Verified via glob - all service/adapter files confirmed, test_server.py chain logic confirmed, no new gaps identified beyond those already listed in the plan
 > **(2026-04-09 16:00) REFINED:** Re-verified all gaps via glob and grep - tests/ directory does NOT exist, mobile/ does NOT exist, schema missing updated_at in user_preferences, audio_importer.py NOT in adapters/
 > **(2026-04-09 17:00) RE-VERIFIED:** Confirmed specs vs code - plan accurately reflects current state. All gaps verified via glob/read.
+> **(2026-04-09 17:15) REFINED:** Verified schema - reminders.updated_at EXISTS (line 27), user_preferences.updated_at MISSING (line 74-77). Fixed gap analysis note.
 
 ### Verified Missing Files (Phase 1 Backend Services)
 
@@ -60,6 +61,7 @@ This document maps the specification requirements to implementation tasks, prior
 **Schema gaps requiring new migration (002) per verified spec Section 13.2:**
 - ❌ `user_preferences` table MISSING `updated_at` column — verified in 001_initial_schema.sql (line 74-77)
 - ❌ `reminders` table MISSING `recurrence_rule` field for recurring reminders (spec Section 3.3)
+- ✅ `reminders` table HAS `updated_at` column (already present at line 27)
 - ⚠️ `calendar_sync` table STRUCTURE DOES NOT MATCH spec — stores event data, not sync state
 - ⚠️ No CHECK constraints for `reminder_type` enum values (SQLite supports CHECK but not enforced)
 - ⚠️ No CHECK constraints for `urgency_tier` enum values (SQLite supports CHECK but not enforced)
@@ -502,8 +504,8 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 **Migration file 001_initial_schema.sql has CORRECT base schema but MISSING:**
 
 - ⚠️ `calendar_sync` table stores EVENT data (OK for v1) — spec may want sync state separate, but current design works
-- ⚠️ `user_preferences` table missing `updated_at` column (spec Section 13.2 requires it)
 - ❌ No `recurrence_rule` field in reminders table for recurring reminders (spec Section 3.3)
+- ❌ `user_preferences` table missing `updated_at` column (spec Section 13.2 requires it)
 - ❌ No CHECK constraint for `reminder_type` enum values (countdown_event | simple_countdown | morning_routine | standing_recurring)
 - ❌ No CHECK constraint for `urgency_tier` enum values (calm | casual | pointed | urgent | pushing | firm | critical | alarm)
 
