@@ -353,11 +353,23 @@ This document maps the specification requirements to implementation tasks, prior
 
 ## Phase 4: Testing & Polish (Week 9-10)
 
-### Status: NOT STARTED — Backend implementation complete, needs testing
+### Status: NOT STARTED — Backend implementation complete, testing infrastructure needed
 
-### P1 — High Priority
+### P0 — Critical Path
 
-#### 22. Integration Tests
+#### 22. Unit Tests [PENDING]
+**Status:** Pending — No unit tests exist
+**Spec Ref:** Section 14
+**Task:** Write unit tests for backend services
+- Chain engine determinism tests (TC-01 through TC-06)
+- Parser fixtures and keyword extraction tests
+- TTS adapter mock tests
+- LLM adapter mock tests
+- Schema validation tests
+**Acceptance Criteria:** All unit tests pass
+**Files:** `tests/unit/test_chain_engine.py`, `tests/unit/test_reminder_parser.py`, `tests/unit/test_tts_adapter.py`, `tests/unit/test_llm_adapter.py`
+
+#### 23. Integration Tests [PENDING]
 **Status:** Pending
 **Spec Ref:** Section 14
 **Task:** Write integration tests for critical flows
@@ -365,10 +377,22 @@ This document maps the specification requirements to implementation tasks, prior
 - Anchor firing flow (schedule → fire → mark fired)
 - Snooze recovery flow (snooze → recompute → re-register)
 - Feedback loop flow (dismiss → feedback → adjustment)
-- **Target:** All integration tests pass
-**Files:** `tests/integration/*.py`
+**Acceptance Criteria:** All integration tests pass
+**Files:** `tests/integration/test_reminder_flow.py`, `tests/integration/test_anchor_firing.py`, `tests/integration/test_snooze_recovery.py`, `tests/integration/test_feedback_loop.py`
 
-#### 23. E2E Tests (Detox)
+### P1 — High Priority
+
+#### 24. Schema Migration: Reminder Types [PENDING]
+**Status:** Pending
+**Spec Ref:** Section 3.3
+**Task:** Add migration for missing reminder types
+- Add `reminder_type` enum values: `simple_countdown`, `morning_routine`, `standing_recurring`
+- Add `recurrence_rule` field to reminders table for recurring reminders
+- Add persistent streak counter field for recurring reminders
+**Acceptance Criteria:** Migration applies cleanly, all reminder types supported
+**Files:** `src/backend/database/migrations/002_reminder_types.sql`
+
+#### 25. E2E Tests (Detox)
 **Status:** Pending
 **Spec Ref:** Section 14
 **Task:** Write end-to-end tests for critical user journeys
@@ -378,7 +402,7 @@ This document maps the specification requirements to implementation tasks, prior
 - Dismissal feedback
 - Settings navigation
 - Sound library browsing
-- **Target:** All E2E tests pass
+**Target:** All E2E tests pass
 **Files:** `tests/e2e/*.spec.ts`
 
 ---
@@ -390,11 +414,23 @@ This document maps the specification requirements to implementation tasks, prior
 - **Recurring reminders:** No `recurrence_rule` field in reminders table (spec Section 1.3, 3.3, 9.3 mentions standing/recurring with RRULE support)
 - **Streak tracking:** Stats calculated at query time but no persistent streak counter for recurring reminders
 
+### New: Schema Migration for Reminder Types [PENDING]
+- **Task:** Add migration to add missing reminder types and recurrence_rule field
+- **Files:** `src/backend/database/migrations/002_reminder_types.sql`
+
 ### Backend Test Coverage
 - **No tests directory exists** — spec Section 14 requires unit, integration, and E2E tests
 - No unit tests for chain engine (TC-01 through TC-06)
 - No integration tests for reminder creation flow
 - No E2E tests (Detox) for mobile app
+
+### New: Unit Tests [PENDING]
+- **Task:** Write unit tests for chain engine, parser, TTS adapter, LLM adapter
+- **Files:** `tests/unit/test_chain_engine.py`, `tests/unit/test_reminder_parser.py`, etc.
+
+### New: Integration Tests [PENDING]
+- **Task:** Write integration tests for reminder creation flow, anchor firing, snooze recovery
+- **Files:** `tests/integration/test_reminder_flow.py`, etc.
 
 ### Technical Debt
 - `src/test_server.py` contains monolithic chain engine logic — needs refactoring to `src/backend/services/chain_engine.py`
@@ -434,9 +470,11 @@ Phase 3 (Frontend) - NOT STARTED
 ├── 20. Calendar Tab (depends on 11)
 └── 21. Sound Library (depends on 13)
 
-Phase 4 (Testing) - NOT STARTED
-├── 22. Integration Tests (depends on phases 1-3)
-└── 23. E2E Tests (depends on phase 3)
+Phase 4 (Testing & Schema) - NOT STARTED
+├── 22. Unit Tests (depends on phases 1-2)
+├── 23. Integration Tests (depends on 22)
+├── 24. Schema Migration: Reminder Types (depends on phase 1)
+└── 25. E2E Tests (depends on phase 3)
 ```
 
 ---
