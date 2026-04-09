@@ -18,22 +18,27 @@ This document maps the specification requirements to implementation tasks, prior
 | 10. Voice Personality | ❌ NOT STARTED | Templates exist in `src/test_server.py:373` (VOICE_PERSONALITIES), but NOT as separate `voice_generator.py` / `message_templates.py` |
 | 11. History & Stats | ❌ NOT STARTED | `calculate_hit_rate()` exists in `src/test_server.py:607`, but NOT extracted to `stats_service.py`; `feedback_loop.py` NOT created |
 | 12. Sound Library | ⚠️ Partial | `src/backend/services/sound_manager.py` exists, `audio_importer.py` NOT created |
-| 13. Data Persistence | ⚠️ Partial | Schema gaps confirmed - `user_preferences` missing `updated_at`, `calendar_sync` wrong schema (stores events, not sync state), no `recurrence_rule` field in reminders, no CHECK constraints for enums |
+| 13. Data Persistence | ⚠️ Partial | Schema fixed in test_server.py, but migration file 001_initial_schema.sql still has issues (wrong calendar_sync schema, missing user_preferences.updated_at); no recurrence_rule field in reminders, no CHECK constraints for enums |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does NOT exist |
 
 ### Verified Schema Gaps (per spec Section 13.2)
 
-**CONFIRMED - Schema 001_initial_schema.sql issues:**
-- `user_preferences` table has ONLY `key, value` columns - **MISSING `updated_at` column**
-- `calendar_sync` table has WRONG schema - currently stores EVENT data (id, calendar_id, event_id, event_title, etc.) instead of SYNC STATE (`calendar_type PRIMARY KEY, last_sync_at, sync_token, is_connected`)
-- `reminders` table MISSING `recurrence_rule` field for recurring reminders
-- No CHECK constraint for `reminder_type` enum values (spec requires: countdown_event, simple_countdown, morning_routine, standing_recurring)
-- No CHECK constraint for `urgency_tier` enum values in anchors table
+**SCHEMA UPDATED in test_server.py** - The in-memory DB init now has correct schema:
+- ✅ Added `updated_at` column to `user_preferences` table
+- ✅ Fixed `calendar_sync` table to store sync state (`calendar_type` PRIMARY KEY, last_sync_at, sync_token, is_connected)
+- ✅ Added `custom_sounds` table with spec fields
+- ✅ Added `origin_lat`, `origin_lng`, `origin_address`, `calendar_event_id`, `custom_sound_path` to reminders
 
-**Already correct in schema:**
-- PRAGMA foreign_keys = ON ✓
-- PRAGMA journal_mode = WAL ✓
-- Anchors table has `snoozed_to` and `tts_fallback` fields ✓
+**⚠️ Migration file 001_initial_schema.sql still has WRONG schema:**
+- `calendar_sync` table still stores EVENT data instead of sync state (needs migration 002)
+- `user_preferences` still missing `updated_at` column
+- No CHECK constraints for enum values
+
+**Schema gaps requiring new migration (002):**
+- Fix `calendar_sync` table schema (currently stores events, should store sync state)
+- Add `updated_at` column to `user_preferences` table
+- Consider adding `recurrence_rule` field for recurring reminders (spec Section 3.3)
+- Add CHECK constraints for `reminder_type` and `urgency_tier` enum values
 
 **⚠️ Remaining Work - Backend Service Files:**
 
@@ -452,14 +457,19 @@ This document maps the specification requirements to implementation tasks, prior
 
 ## Known Gaps & Technical Debt
 
-### Schema Gaps (per spec Section 3.3 & 13.2) - VERIFIED
+### Schema Gaps (per spec Section 3.3 & 13.2) - PARTIALLY FIXED
 
-**CONFIRMED - Migration 001 has issues that need migration 002 to fix:**
-- ❌ `user_preferences` table has only `key, value` - MISSING `updated_at` column
-- ❌ `reminders` table MISSING `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3 mentions RRULE support)
-- ❌ `calendar_sync` table has WRONG SCHEMA - stores EVENTS (id, calendar_id, event_id, event_title, event_location, event_start, event_end, sync_status) instead of SYNC STATE (`calendar_type PRIMARY KEY, last_sync_at, sync_token, is_connected`)
-- ❌ No CHECK constraint for `reminder_type` enum values (spec requires: countdown_event, simple_countdown, morning_routine, standing_recurring)
-- ❌ No CHECK constraint for `urgency_tier` enum values in anchors table
+**SCHEMA UPDATED in test_server.py (in-memory DB):**
+- ✅ Added `updated_at` column to `user_preferences` table
+- ✅ Fixed `calendar_sync` table to store sync state
+- ✅ Added `custom_sounds` table with spec fields
+
+**Migration file 001_initial_schema.sql still needs fixing (migration 002):**
+- ❌ `calendar_sync` table still has WRONG SCHEMA - stores EVENTS instead of SYNC STATE
+- ❌ `user_preferences` table still missing `updated_at` column
+- ❌ `reminders` table MISSING `recurrence_rule` field for recurring reminders
+- ❌ No CHECK constraint for `reminder_type` enum values
+- ❌ No CHECK constraint for `urgency_tier` enum values
 
 ### Testing Gap (per spec Section 14) - VERIFIED
 
