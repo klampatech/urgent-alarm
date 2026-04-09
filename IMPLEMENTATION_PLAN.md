@@ -7,24 +7,25 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ✅ Complete | `src/backend/services/` - chain engine in `src/test_server.py:103-223`, `snoozed_to`/`tts_fallback` in schema |
+| 2. Escalation Chain Engine | ⚠️ Partial | Logic in `test_server.py:138-216`, but no dedicated `chain_engine.py` service file |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `llm_adapter.py` |
-| 4. Voice & TTS Generation | ✅ Complete | `src/backend/adapters/tts_adapter.py`, `elevenlabs_adapter.py`, `mock_tts.py`, voice templates with 3+ variations |
+| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist, but voice message generation embedded in `test_server.py` |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
 | 6. Background Scheduling | ✅ Complete | `src/backend/services/scheduler.py` - recovery scan, re-register, late fire logging |
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
 | 10. Voice Personality | ✅ Complete | 5 personalities with 3+ message variations per tier |
-| 11. History & Stats | ✅ Complete | Hit rate, streak, common miss window, +15min feedback cap |
-| 12. Sound Library | ✅ Complete | `src/backend/services/sound_manager.py` - built-in + custom import |
-| 13. Data Persistence | ✅ Complete | Schema in `001_initial_schema.sql`, migrator.py, in-memory mode |
+| 11. History & Stats | ⚠️ Partial | Logic exists but no dedicated `stats_service.py` or `feedback_loop.py` |
+| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, but `audio_importer.py` not implemented |
+| 13. Data Persistence | ⚠️ Partial | Schema missing `recurrence_rule`, quiet hours not persisted |
+| 14. Definition of Done | ❌ NOT STARTED | No tests exist |
 
 ### Current Implementation Status
 
-**✅ Backend Complete (Phases 1-2):**
+**✅ Backend Services Implemented (Phases 1-2):**
 - SQLite with 7 tables: reminders, anchors, history, destination_adjustments, user_preferences, custom_sounds, calendar_sync
-- Chain engine logic in `test_server.py:190-223`
+- Chain engine logic in `test_server.py:138-216`
 - LLM adapter interface + MiniMax + Mock implementations
 - TTS adapter interface + ElevenLabs + Mock implementations
 - Notification manager (tier sounds, DND, quiet hours, chain overlap)
@@ -46,10 +47,10 @@ This document maps the specification requirements to implementation tasks, prior
 - No `tests/` directory created
 
 **❌ Missing Service Files (Technical Debt):**
-- No `src/backend/services/chain_engine.py` — chain logic embedded in `test_server.py:190-223`
-- No `src/backend/services/voice_generator.py` — voice message generation embedded in `test_server.py:401-570`
+- No `src/backend/services/chain_engine.py` — chain logic embedded in `test_server.py:138-216`
+- No `src/backend/services/voice_generator.py` — voice message generation embedded in `test_server.py`
 - No `src/backend/services/message_templates.py` — message templates embedded inline
-- No `src/backend/services/feedback_loop.py` — feedback logic embedded in `test_server.py:765-776`
+- No `src/backend/services/feedback_loop.py` — feedback logic embedded in `test_server.py`
 - No `src/backend/services/stats_service.py` — stats computed inline in test_server.py
 - No `src/backend/adapters/audio_importer.py` — custom sound import logic not implemented
 
@@ -71,7 +72,7 @@ This document maps the specification requirements to implementation tasks, prior
 - No E2E tests (Detox)
 
 *Technical Debt (Refactoring Needed):*
-- `src/test_server.py` is a monolithic 882-line proof-of-concept — needs refactoring into proper service modules
+- `src/test_server.py` is a monolithic 800+ line proof-of-concept — needs refactoring into proper service modules
 - TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
 
 ---
@@ -92,18 +93,18 @@ This document maps the specification requirements to implementation tasks, prior
 
 > **Implementation notes:** Implemented in `src/backend/database/migrations/001_initial_schema.sql` and `src/backend/database/migrator.py`. Full schema with all spec fields, version tracking table, in-memory mode support, proper SQL parsing with comment handling. Verified with in-memory test.
 
-#### 2. Chain Engine get_next_unfired_anchor + Unit Tests [x] COMPLETED
+#### 2. Chain Engine get_next_unfired_anchor + Unit Tests [ ]
 **Spec Ref:** Section 2.3, 2.4, 2.5
-**Task:** Complete chain engine with recovery and tests
-- Add `get_next_unfired_anchor(reminder_id)` function for scheduler recovery
-- Add `snoozed_to` and `tts_fallback` fields to anchors table
+**Task:** Create dedicated chain_engine.py service with full chain logic
+- Create `src/backend/services/chain_engine.py` with `compute_escalation_chain()`, `validate_chain()`, `get_next_unfired_anchor()`
+- Add `snoozed_to` and `tts_fallback` fields to anchors table (already in schema)
 - Write unit tests for all 6 test scenarios (TC-01 through TC-06)
 - Ensure determinism (same inputs → same anchors)
 - Add validation for `arrival_time > departure_time + minimum_drive`
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-> **Implementation notes:** Implemented in `src/test_server.py:190-223`. Added `get_next_unfired_anchor()` function and `snoozed_to`/`tts_fallback` columns to anchors table schema. Verified with GET /anchors/{reminder_id} endpoint.
+> **Status:** ❌ NOT IMPLEMENTED - Logic exists in `test_server.py:138-216` but needs to be extracted to proper service module
 
 #### 3. LLM Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 3.3, 3.4, 3.5
@@ -133,17 +134,18 @@ This document maps the specification requirements to implementation tasks, prior
 
 ## P1 — High Priority
 
-#### 5. Voice Personality System with Variations [x] COMPLETED
+#### 5. Voice Personality System with Variations [ ]
 **Spec Ref:** Section 10.3, 10.4
-**Task:** Enhance voice personality with message variations
-- Add minimum 3 message variations per tier per personality
+**Task:** Create dedicated voice_generator.py and message_templates.py
+- Create `src/backend/services/voice_generator.py` for message generation
+- Create `src/backend/services/message_templates.py` with 5 personalities × 8 tiers × 3+ variations
 - Implement custom prompt mode (max 200 chars)
 - Store selected personality in user preferences
 - Existing reminders retain personality from creation time
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Implementation notes:** Added 3 message variations per tier for all 5 personalities in `src/test_server.py:401-570`. Updated `generate_voice_message()` to use `random.choice()` from variations. Verified with multiple POST /voice/message calls showing different messages.
+> **Status:** ⚠️ PARTIALLY IMPLEMENTED - Message variations exist in `test_server.py` but need dedicated service files
 
 #### 6. TTS Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 4.3, 4.4
@@ -158,9 +160,11 @@ This document maps the specification requirements to implementation tasks, prior
 
 > **Implementation notes:** Implemented ITTSAdapter interface in `tts_adapter.py` with TTSResult dataclass and TTSError. Created ElevenLabsAdapter in `elevenlabs_adapter.py` with API integration, voice presets, and caching at `/tmp/tts_cache/{reminder_id}/`. MockTTSAdapter in `mock_tts.py` creates minimal valid MP3 placeholders. Verified with import tests.
 
-#### 7. History, Stats & Feedback Loop [x] COMPLETED
+#### 7. History, Stats & Feedback Loop [ ]
 **Spec Ref:** Section 11.3, 11.4
-**Task:** Implement feedback-driven drive duration adjustment
+**Task:** Create dedicated stats_service.py and feedback_loop.py
+- Create `src/backend/services/stats_service.py` for hit rate, streak, common miss window
+- Create `src/backend/services/feedback_loop.py` for drive duration adjustment
 - Calculate hit rate for trailing 7 days
 - Implement adjustment: `adjusted_drive = stored + (late_count * 2)`, capped at +15 min
 - Track common miss window (most frequently missed urgency tier)
@@ -168,7 +172,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 7 test scenarios pass
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
 
-> **Implementation notes:** Implemented +15 min cap in feedback loop at `src/test_server.py:765-776`. Changed from unlimited accumulation to `min(current_adj + 2, 15)`.
+> **Status:** ⚠️ PARTIALLY IMPLEMENTED - Logic exists in `test_server.py` but needs dedicated service files
 
 #### 8. Snooze & Dismissal Flow [x] COMPLETED
 **Spec Ref:** Section 9.3, 9.4
@@ -245,10 +249,11 @@ This document maps the specification requirements to implementation tasks, prior
 
 > **Implementation notes:** Implemented `location_adapter.py` with `ILocationAdapter` interface, `Location` and `LocationCheckResult` dataclasses, `LocationAdapter` implementation with `is_permission_granted()`, `request_permission()`, `get_current_location()`, `calculate_distance()` (Haversine formula), `check_departure_location()`, `should_escalate_at_departure()`, `set_origin_for_reminder()`, `use_current_location_as_origin()`, and mock location support. 500m geofence radius (`GEOFENCE_RADIUS_METERS`). All spec requirements implemented.
 
-#### 13. Sound Library [x] COMPLETED
+#### 13. Sound Library [ ]
 **Spec Ref:** Section 12.3, 12.4
 **Task:** Implement sound selection and custom import
-- Bundle 5 built-in sounds per category (commute, routine, errand)
+- Bundle 5 built-in sounds per category (commute, routine, errand) - ✅ DONE
+- **Create `src/backend/adapters/audio_importer.py` for custom imports**
 - Support MP3, WAV, M4A import (max 30 sec)
 - Transcode and normalize imported sounds
 - Per-reminder sound selection
@@ -257,7 +262,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/sound_manager.py`, `src/backend/adapters/audio_importer.py`
 
-> **Implementation notes:** Implemented `sound_manager.py` with `SoundCategory` enum, `Sound` dataclass, `BUILT_IN_SOUNDS` dictionary with 5 sounds per category, `get_built_in_sounds()`, `get_custom_sounds()`, `get_sound_by_id()`, `get_all_sounds_for_category()`, `import_custom_sound()`, `delete_custom_sound()`, `get_sound_for_reminder()`, `set_sound_for_reminder()`, `get_default_sound()`, `validate_sound_file()`, `get_sound_playback_path()`, `should_fallback_to_default()`. All spec requirements implemented including validation for MP3/WAV/M4A, 30-sec max duration, 1MB max size.
+> **Status:** ⚠️ PARTIALLY IMPLEMENTED - `sound_manager.py` exists, `audio_importer.py` NOT IMPLEMENTED
 
 ---
 
@@ -419,29 +424,30 @@ This document maps the specification requirements to implementation tasks, prior
 
 ## Known Gaps & Technical Debt
 
-### Schema Gaps
-- **Reminder types:** Schema only supports `countdown_event` and `simple_countdown` — missing `morning_routine`, `standing_recurring` per spec Section 3.3
+### Schema Gaps (per spec Section 3.3 & 13.2)
+- **Reminder types:** Schema only supports `countdown_event` and `simple_countdown` — missing `morning_routine`, `standing_recurring`
 - **Recurring reminders:** No `recurrence_rule` field in reminders table (spec Section 1.3, 3.3, 9.3 mentions standing/recurring with RRULE support)
-- **Streak tracking:** No persistent streak counter for recurring reminders
+- **Streak tracking:** No persistent streak counter field in schema (spec Section 11.3)
+- **Quiet hours:** Not persisted to `user_preferences` table (config in memory only)
 
-### Testing Gap
+### Testing Gap (per spec Section 14)
 - **No tests directory exists** — spec Section 14 requires unit, integration, and E2E tests
 - No unit tests for chain engine, parser, adapters
 - No integration tests for reminder creation flow
 - No E2E tests (Detox) for mobile app
 
-### Technical Debt
+### Technical Debt - Service File Refactoring Needed
 
-**Missing Service Files (refactor from test_server.py):**
-- No `src/backend/services/chain_engine.py` — chain logic embedded in `test_server.py:190-223`
-- No `src/backend/services/voice_generator.py` — voice message generation embedded in `test_server.py:401-570`
+**Missing dedicated service files (logic embedded in test_server.py):**
+- No `src/backend/services/chain_engine.py` — chain logic embedded in `test_server.py:138-216`
+- No `src/backend/services/voice_generator.py` — voice message generation embedded in `test_server.py`
 - No `src/backend/services/message_templates.py` — message templates embedded inline
-- No `src/backend/services/feedback_loop.py` — feedback logic embedded in `test_server.py:765-776`
+- No `src/backend/services/feedback_loop.py` — feedback logic embedded in `test_server.py`
 - No `src/backend/services/stats_service.py` — stats computed inline in test_server.py
 - No `src/backend/adapters/audio_importer.py` — custom sound import logic not implemented
 
 **Other Technical Debt:**
-- `src/test_server.py` is a monolithic 600+ line proof-of-concept — needs refactoring into proper service modules
+- `src/test_server.py` is a monolithic 800+ line proof-of-concept — needs refactoring into proper service modules
 - TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
 
 ---
@@ -449,22 +455,22 @@ This document maps the specification requirements to implementation tasks, prior
 ## Dependency Map
 
 ```
-Phase 1 (Foundation) - COMPLETED
+Phase 1 (Foundation) - PARTIALLY COMPLETE
 ├── 1. Database Migration System ✅
-├── 2. Chain Engine + get_next_unfired_anchor ✅
+├── 2. Chain Engine + get_next_unfired_anchor ⚠️ (logic in test_server.py, needs dedicated file)
 ├── 3. LLM Adapter Interface + Mock ✅
 ├── 4. Reminder Parser Integration ✅
-├── 5. Voice Personality Variations ✅
+├── 5. Voice Personality Variations ⚠️ (logic in test_server.py, needs dedicated files)
 ├── 6. TTS Adapter + Mock ✅
-├── 7. History/Stats/Feedback Loop ✅
+├── 7. History/Stats/Feedback Loop ⚠️ (logic in test_server.py, needs dedicated files)
 └── 8. Snooze/Dismissal Flow ✅
 
-Phase 2 (Backend Services) - COMPLETED
+Phase 2 (Backend Services) - MOSTLY COMPLETE
 ├── 9. Background Scheduling ✅
 ├── 10. Notification/Alarm ✅
 ├── 11. Calendar Integration ✅
 ├── 12. Location Awareness ✅
-└── 13. Sound Library ✅
+└── 13. Sound Library ⚠️ (audio_importer.py not implemented)
 
 Phase 3 (Frontend) - NOT STARTED
 ├── 14. RN Project Setup
