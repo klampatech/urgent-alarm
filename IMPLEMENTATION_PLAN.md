@@ -7,27 +7,28 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ❌ NOT STARTED | Logic exists in `src/test_server.py:138` but NOT extracted to `chain_engine.py` service |
+| 2. Escalation Chain Engine | ❌ NOT STARTED | Logic exists in `src/test_server.py:373` (VOICE_PERSONALITIES), `src/test_server.py:590` (generate_voice_message) but NOT extracted to `chain_engine.py` service |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `src/backend/adapters/llm_adapter.py` |
-| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`src/backend/adapters/tts_adapter.py`, `src/backend/adapters/elevenlabs_adapter.py`), voice message generation in `src/test_server.py:587` but NOT extracted to `voice_generator.py` |
+| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`src/backend/adapters/tts_adapter.py`, `src/backend/adapters/elevenlabs_adapter.py`), voice message generation in `src/test_server.py:590` but NOT extracted to `voice_generator.py` |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
 | 6. Background Scheduling | ✅ Complete | `src/backend/services/scheduler.py` - recovery scan, re-register, late fire logging |
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `src/backend/adapters/apple_calendar_adapter.py`, `src/backend/adapters/google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `src/backend/services/dismissal_handler.py` |
-| 10. Voice Personality | ❌ NOT STARTED | Templates exist in `src/test_server.py:373` (VOICE_PERSONALITIES), but NOT as separate `voice_generator.py` / `message_templates.py` |
-| 11. History & Stats | ❌ NOT STARTED | `calculate_hit_rate()` exists in `src/test_server.py:607`, but NOT extracted to `stats_service.py`; `feedback_loop.py` NOT created |
+| 10. Voice Personality | ❌ NOT STARTED | Templates exist in `src/test_server.py:373` (VOICE_PERSONALITIES dict with 5 personalities × 8 tiers), `generate_voice_message()` in `src/test_server.py:590`, but NOT extracted to `voice_generator.py` / `message_templates.py` |
+| 11. History & Stats | ❌ NOT STARTED | Stats calculation NOT extracted to `stats_service.py`; `feedback_loop.py` NOT created |
 | 12. Sound Library | ⚠️ Partial | `src/backend/services/sound_manager.py` exists, `audio_importer.py` NOT created |
-| 13. Data Persistence | ⚠️ Partial | Schema fixed in test_server.py, but migration file 001_initial_schema.sql still has issues (wrong calendar_sync schema, missing user_preferences.updated_at); no recurrence_rule field in reminders, no CHECK constraints for enums |
+| 13. Data Persistence | ⚠️ Partial | Schema has gaps: `calendar_sync` table wrong (stores events not sync state), `user_preferences` missing `updated_at`, no `recurrence_rule` in reminders, no CHECK constraints for enums |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does NOT exist |
 
 ### Verified Schema Gaps (per spec Section 13.2)
 
 **Migration file 001_initial_schema.sql has WRONG schema:**
-- `calendar_sync` table stores EVENT data instead of sync state (calendar_type PRIMARY KEY, last_sync_at, sync_token, is_connected)
+- `calendar_sync` table stores EVENT data instead of sync state (should be: calendar_type PRIMARY KEY, last_sync_at, sync_token, is_connected)
 - `user_preferences` table missing `updated_at` column (spec Section 13.2 requires it)
 - No `recurrence_rule` field in reminders table for recurring reminders
-- No CHECK constraints for `reminder_type` and `urgency_tier` enum values
+- No CHECK constraints for `reminder_type` enum values (countdown_event | simple_countdown | morning_routine | standing_recurring)
+- No CHECK constraints for `urgency_tier` enum values (calm | casual | pointed | urgent | pushing | firm | critical | alarm)
 
 **Schema gaps requiring new migration (002):**
 - Fix `calendar_sync` table schema (currently stores events, should store sync state per spec Section 13.2)
@@ -90,7 +91,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-> **Status:** ⚠️ **VERIFIED GAP** - Logic exists in `src/test_server.py:138` but needs extraction to `src/backend/services/chain_engine.py`
+> **Status:** ⚠️ **VERIFIED GAP** - Chain engine logic NOT implemented in separate service file, needs creation per spec Section 2
 > **Implementation approach:**
 > - Define `UrgencyTier` enum matching spec: calm, casual, pointed, urgent, pushing, firm, critical, alarm
 > - `compute_escalation_chain(arrival_time, drive_duration)` → list of Anchor objects
@@ -139,7 +140,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Status:** ⚠️ **VERIFIED GAP** - Templates exist in `src/test_server.py:373` (VOICE_PERSONALITIES dict), `generate_voice_message()` in test_server.py:587, need extraction to dedicated service files
+> **Status:** ⚠️ **VERIFIED GAP** - Templates exist in `src/test_server.py:373` (VOICE_PERSONALITIES dict), `generate_voice_message()` in `src/test_server.py:590`, need extraction to dedicated service files
 > **Implementation approach:**
 > - `voice_generator.py`: Generate messages given personality + urgency_tier + destination
 > - `message_templates.py`: 5 personalities × 8 tiers × 3+ variations (currently in test_server.py:373)
@@ -476,11 +477,11 @@ This document maps the specification requirements to implementation tasks, prior
 ### Missing Service Files (per spec Section 2-12) - VERIFIED
 
 **These files MUST be created per spec sections:**
-- ⚠️ `src/backend/services/chain_engine.py` — chain logic in `src/test_server.py:138`, needs extraction per spec Section 2
-- ⚠️ `src/backend/services/voice_generator.py` — message generation in `src/test_server.py:587`, needs extraction per spec Section 4, 10
+- ⚠️ `src/backend/services/chain_engine.py` — NOT IMPLEMENTED, needs creation per spec Section 2
+- ⚠️ `src/backend/services/voice_generator.py` — message generation in `src/test_server.py:590`, needs extraction per spec Section 4, 10
 - ⚠️ `src/backend/services/message_templates.py` — templates in `src/test_server.py:373`, needs extraction per spec Section 10
-- ⚠️ `src/backend/services/feedback_loop.py` — drive_duration adjustment in `src/test_server.py`, NOT IMPLEMENTED, needs spec Section 11
-- ⚠️ `src/backend/services/stats_service.py` — `calculate_hit_rate()` in `src/test_server.py:607`, needs extraction per spec Section 11
+- ⚠️ `src/backend/services/feedback_loop.py` — NOT IMPLEMENTED, needs creation per spec Section 11
+- ⚠️ `src/backend/services/stats_service.py` — NOT IMPLEMENTED, needs creation per spec Section 11
 - ❌ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 **DOES NOT EXIST**
 
 ### Other Technical Debt - VERIFIED
@@ -491,14 +492,14 @@ This document maps the specification requirements to implementation tasks, prior
 ## Dependency Map
 
 ```
-Phase 1 (Foundation) - PARTIALLY COMPLETE - Logic in test_server.py needs extraction
-├── 1. Database Migration System ⚠️ (schema in test_server.py correct, migration file needs 002)
-├── 2. Chain Engine ❌ (logic in test_server.py:138, NOT extracted to chain_engine.py)
+Phase 1 (Foundation) - PARTIALLY COMPLETE - Missing service files need creation
+├── 1. Database Migration System ⚠️ (schema correct, migration file 002 needed for schema fixes)
+├── 2. Chain Engine ❌ (NOT IMPLEMENTED - must create chain_engine.py per spec Section 2)
 ├── 3. LLM Adapter Interface + Mock ✅
 ├── 4. Reminder Parser Integration ✅
 ├── 5. Voice Personality Variations ❌ (templates in test_server.py:373, NOT extracted)
 ├── 6. TTS Adapter + Mock ✅
-├── 7. History/Stats/Feedback Loop ❌ (calculate_hit_rate in test_server.py:607, NOT extracted; feedback_loop.py NOT created)
+├── 7. History/Stats/Feedback Loop ❌ (stats_service.py NOT IMPLEMENTED, feedback_loop.py NOT IMPLEMENTED)
 └── 8. Snooze/Dismissal Flow ✅
 
 Phase 2 (Backend Services) - MOSTLY COMPLETE
@@ -506,7 +507,7 @@ Phase 2 (Backend Services) - MOSTLY COMPLETE
 ├── 10. Notification/Alarm ✅
 ├── 11. Calendar Integration ✅
 ├── 12. Location Awareness ✅
-└── 13. Sound Library ❌ (audio_importer.py NOT created)
+└── 13. Sound Library ❌ (audio_importer.py NOT IMPLEMENTED)
 
 Phase 3 (Frontend) - NOT STARTED
 ├── 14. RN Project Setup
