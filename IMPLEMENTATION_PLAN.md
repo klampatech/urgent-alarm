@@ -7,7 +7,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ❌ NOT IMPLEMENTED | Logic in `test_server.py:126-225`, but service file NOT created |
+| 2. Escalation Chain Engine | ⚠️ PARTIALLY COMPLETE | Logic in `test_server.py:126-225`, service file NOT created yet |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `llm_adapter.py` |
 | 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist, but voice_generator.py NOT created |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
@@ -15,8 +15,8 @@ This document maps the specification requirements to implementation tasks, prior
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
-| 10. Voice Personality | ❌ NOT IMPLEMENTED | 5 personalities in `test_server.py:373-570`, but NOT in dedicated `message_templates.py` |
-| 11. History & Stats | ❌ NOT IMPLEMENTED | `calculate_hit_rate` in `test_server.py:607-626`, but NOT in dedicated `stats_service.py` |
+| 10. Voice Personality | ⚠️ PARTIALLY COMPLETE | 5 personalities in `test_server.py:373-570`, but NOT in dedicated service files |
+| 11. History & Stats | ⚠️ PARTIALLY COMPLETE | `calculate_hit_rate` in `test_server.py:607-626`, but dedicated `stats_service.py` NOT created |
 | 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, but `audio_importer.py` not implemented |
 | 13. Data Persistence | ⚠️ Partial | Schema exists but missing `recurrence_rule`, quiet hours not persisted |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does not exist |
@@ -34,13 +34,13 @@ This document maps the specification requirements to implementation tasks, prior
 - Snooze/Dismissal handlers ✅
 - Sound manager (built-in + custom import stub) ⚠️
 
-**❌ NOT IMPLEMENTED - Missing Service Files:**
-- ❌ No `chain_engine.py` — chain logic in `test_server.py:126-250` (URGENCY_TIERS, compute_escalation_chain, validate_chain, get_next_unfired_anchor)
-- ❌ No `voice_generator.py` — message generation needs extraction
-- ❌ No `message_templates.py` — VOICE_PERSONALITIES in `test_server.py:373-570`
-- ❌ No `feedback_loop.py` — drive_duration adjustment logic not extracted
-- ❌ No `stats_service.py` — `calculate_hit_rate` in `test_server.py:607-626` only
-- ❌ No `audio_importer.py` — custom sound import not implemented
+**⚠️ NOT IMPLEMENTED - Missing Service Files:**
+- ⚠️ No `chain_engine.py` — chain logic in `test_server.py:126-225` (URGENCY_TIERS, compute_escalation_chain, validate_chain, get_next_unfired_anchor)
+- ⚠️ No `voice_generator.py` — message generation needs extraction from `test_server.py:587-603`
+- ⚠️ No `message_templates.py` — VOICE_PERSONALITIES in `test_server.py:373-570`
+- ⚠️ No `feedback_loop.py` — drive_duration adjustment logic in `test_server.py:817-837`
+- ⚠️ No `stats_service.py` — `calculate_hit_rate` in `test_server.py:607-626`, missing `get_streak`/`get_common_miss_window`
+- ⚠️ No `audio_importer.py` — custom sound import not implemented
 
 **⚠️ Schema Gaps (per spec Section 3.3 & 13.2):**
 - `reminder_type`: Schema has `countdown_event`, `simple_countdown`. **Missing from schema:** `morning_routine`, `standing_recurring`
@@ -60,15 +60,15 @@ This document maps the specification requirements to implementation tasks, prior
 - ❌ No `src/backend/services/stats_service.py` — stats logic in `test_server.py:607-626` (calculate_hit_rate only, no get_streak/get_common_miss_window)
 - ❌ No `src/backend/adapters/audio_importer.py` — custom sound import logic not implemented
 
-**❌ Remaining Work - Backend Service Files:**
+**⚠️ Remaining Work - Backend Service Files (Extraction from test_server.py):**
 
 *Phase 1 - Service Extraction (Not Started):*
-- Create `chain_engine.py` - extract from test_server.py:138-216
-- Create `voice_generator.py` - message generation
-- Create `message_templates.py` - all personality/tier templates
-- Create `feedback_loop.py` - drive duration adjustment logic
-- Create `stats_service.py` - hit rate, streak, common miss
-- Create `audio_importer.py` - custom sound import
+- Extract `chain_engine.py` from test_server.py:126-225
+- Extract `voice_generator.py` from test_server.py:587-603
+- Extract `message_templates.py` from test_server.py:373-570
+- Extract `feedback_loop.py` from test_server.py:817-837
+- Extract `stats_service.py` from test_server.py:607-626
+- Create `audio_importer.py` - custom sound import (new)
 
 *Phase 1 - Testing (Not Started):*
 - No unit tests exist - spec Section 14 requires tests
@@ -114,7 +114,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - Logic EXISTS in `test_server.py:126-250` (URGENCY_TIERS dict, compute_escalation_chain(), validate_chain(), get_next_unfired_anchor()) but needs extraction to proper service module
+> **Status:** ⚠️ NEEDS EXTRACTION - Logic EXISTS in `test_server.py:126-225` (URGENCY_TIERS dict, compute_escalation_chain(), validate_chain(), get_next_unfired_anchor()) — needs extraction to proper service module
 
 #### 3. LLM Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 3.3, 3.4, 3.5
@@ -155,7 +155,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - Need to create dedicated service files. Voice personality templates ARE defined in `test_server.py:373-570` (VOICE_PERSONALITIES dict with 5 personalities × 8 tiers × 3 variations)
+> **Status:** ⚠️ NEEDS EXTRACTION - Templates ARE defined in `test_server.py:373-570` (VOICE_PERSONALITIES dict with 5 personalities × 8 tiers × 3 variations), need dedicated service files
 
 #### 6. TTS Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 4.3, 4.4
@@ -182,7 +182,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 7 test scenarios pass
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - Stats logic partially exists in test_server.py:607-626 (`calculate_hit_rate` only). `get_streak` and `get_common_miss_window` functions NOT IMPLEMENTED
+> **Status:** ⚠️ NEEDS EXTRACTION - `calculate_hit_rate` in `test_server.py:607-626` only. `get_streak` and `get_common_miss_window` functions NOT IMPLEMENTED. Feedback adjustment logic in `test_server.py:817-837`
 
 #### 8. Snooze & Dismissal Flow [x] COMPLETED
 **Spec Ref:** Section 9.3, 9.4
@@ -272,7 +272,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/sound_manager.py`, `src/backend/adapters/audio_importer.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - `sound_manager.py` exists, `audio_importer.py` NOT YET CREATED. Note: Built-in sounds stub exists in sound_manager.py, actual audio files not included
+> **Status:** ⚠️ NEEDS IMPLEMENTATION - `sound_manager.py` exists, `audio_importer.py` NOT YET CREATED. Note: Built-in sounds stub exists in sound_manager.py, actual audio files not included
 
 ---
 
@@ -465,14 +465,14 @@ This document maps the specification requirements to implementation tasks, prior
 ## Dependency Map
 
 ```
-Phase 1 (Foundation) - PARTIALLY COMPLETE - Service Files NEED CREATION
+Phase 1 (Foundation) - PARTIALLY COMPLETE - Service Files NEED EXTRACTION
 ├── 1. Database Migration System ✅
-├── 2. Chain Engine + get_next_unfired_anchor ❌ (needs extraction from test_server.py)
+├── 2. Chain Engine + get_next_unfired_anchor ⚠️ (logic exists in test_server.py:126-225)
 ├── 3. LLM Adapter Interface + Mock ✅
 ├── 4. Reminder Parser Integration ✅
-├── 5. Voice Personality Variations ❌ (needs dedicated files: voice_generator.py, message_templates.py)
+├── 5. Voice Personality Variations ⚠️ (templates in test_server.py:373-570)
 ├── 6. TTS Adapter + Mock ✅
-├── 7. History/Stats/Feedback Loop ❌ (needs dedicated files: stats_service.py, feedback_loop.py)
+├── 7. History/Stats/Feedback Loop ⚠️ (partial in test_server.py:607-626, 817-837)
 └── 8. Snooze/Dismissal Flow ✅
 
 Phase 2 (Backend Services) - MOSTLY COMPLETE
@@ -480,7 +480,7 @@ Phase 2 (Backend Services) - MOSTLY COMPLETE
 ├── 10. Notification/Alarm ✅
 ├── 11. Calendar Integration ✅
 ├── 12. Location Awareness ✅
-└── 13. Sound Library ❌ (audio_importer.py not implemented)
+└── 13. Sound Library ⚠️ (audio_importer.py not implemented)
 
 Phase 3 (Frontend) - NOT STARTED
 ├── 14. RN Project Setup
