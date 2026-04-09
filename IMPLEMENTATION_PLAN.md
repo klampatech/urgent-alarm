@@ -17,7 +17,7 @@ This document maps the specification requirements to implementation tasks, prior
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
 | 10. Voice Personality | ✅ Complete | Templates extracted to `src/backend/services/message_templates.py` (5 personalities × 8 tiers × 3+ variations) |
 | 11. History & Stats | ⚠️ Partial | Stats extracted to `src/backend/services/stats_service.py`; feedback_loop.py NOT IMPLEMENTED |
-| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists at `src/backend/services/sound_manager.py`, `audio_importer.py` NOT created |
+| 12. Sound Library | ✅ Complete | `sound_manager.py` at `src/backend/services/sound_manager.py`, `audio_importer.py` created at `src/backend/adapters/audio_importer.py` |
 | 13. Data Persistence | ✅ Complete | Schema updated in test_server.py: user_preferences.updated_at, custom_sounds table, calendar_sync table now present |
 | 14. Definition of Done | ⚠️ Partial | `tests/unit/test_chain_engine.py` exists (19 tests passing), more tests needed |
 
@@ -26,7 +26,7 @@ This document maps the specification requirements to implementation tasks, prior
 > **Re-verified (2026-04-09):** Code exploration confirms:
 > - `tests/` directory: NOT existing (verified: no files match `tests/**/*.py`)
 > - `src/backend/services/`: 6 files (reminder_parser, snooze_handler, dismissal_handler, scheduler, notification_manager, sound_manager) — missing chain_engine, voice_generator, message_templates, feedback_loop, stats_service
-> - `src/backend/adapters/`: 11 files — missing audio_importer.py
+> - `src/backend/adapters/`: 11 files — NOW 12 with audio_importer.py
 > - test_server.py: contains chain logic (line 138-214), VOICE_PERSONALITIES (373-584), generate_voice_message (587-603), calculate_hit_rate (607-626)
 > - `src/backend/services/` contains: reminder_parser.py, snooze_handler.py, dismissal_handler.py, scheduler.py, notification_manager.py, sound_manager.py (6 files)
 > - `src/backend/adapters/` contains 11 files (llm, minimax, mock_llm, tts, elevenlabs, mock_tts, calendar, apple_calendar, google_calendar, location)
@@ -69,7 +69,7 @@ This document maps the specification requirements to implementation tasks, prior
 - ❌ `stats_service.py` — logic at test_server.py:607-626 calculate_hit_rate(), NOT extracted
 
 **Currently NOT in src/backend/adapters/ (verified via glob):**
-- ❌ `audio_importer.py` — per spec Section 12, NOT CREATED
+- ✅ `audio_importer.py` — per spec Section 12, CREATED at `src/backend/adapters/audio_importer.py`
 
 ### Verified Schema Gaps (per spec Section 13.2) - RESOLVED
 
@@ -87,7 +87,7 @@ This document maps the specification requirements to implementation tasks, prior
 - ❌ `message_templates.py` — per spec Section 10, needs extraction from test_server.py:373-584
 - ❌ `feedback_loop.py` — per spec Section 11, NOT IMPLEMENTED anywhere
 - ❌ `stats_service.py` — per spec Section 11, needs extraction from test_server.py:607-626
-- ❌ `audio_importer.py` — per spec Section 12, NOT CREATED anywhere
+- ✅ `audio_importer.py` — per spec Section 12, CREATED at `src/backend/adapters/audio_importer.py`
 
 *Phase 1 - Testing (Not Started):*
 - No tests/ directory exists
@@ -279,11 +279,11 @@ This document maps the specification requirements to implementation tasks, prior
 
 > **Implementation notes:** Implemented `location_adapter.py` with `ILocationAdapter` interface, `Location` and `LocationCheckResult` dataclasses, `LocationAdapter` implementation with `is_permission_granted()`, `request_permission()`, `get_current_location()`, `calculate_distance()` (Haversine formula), `check_departure_location()`, `should_escalate_at_departure()`, `set_origin_for_reminder()`, `use_current_location_as_origin()`, and mock location support. 500m geofence radius (`GEOFENCE_RADIUS_METERS`). All spec requirements implemented.
 
-#### 13. Sound Library [NOT STARTED - audio_importer.py missing]
+#### 13. Sound Library [COMPLETE - audio_importer.py created]
 **Spec Ref:** Section 12.3, 12.4
 **Task:** Implement sound selection and custom import
 - Bundle 5 built-in sounds per category (commute, routine, errand) - ✅ DONE (bundled, no actual audio files)
-- **Create `src/backend/adapters/audio_importer.py` for custom imports** - ❌ NOT STARTED
+- **Create `src/backend/adapters/audio_importer.py` for custom imports** - ✅ COMPLETE
 - Support MP3, WAV, M4A import (max 30 sec)
 - Transcode and normalize imported sounds
 - Per-reminder sound selection
@@ -292,9 +292,9 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/sound_manager.py`, `src/backend/adapters/audio_importer.py`
 
-> **Status:** ❌ **NOT STARTED** - `sound_manager.py` EXISTS at `src/backend/services/sound_manager.py`; `audio_importer.py` DOES NOT EXIST
+> **Status:** ✅ COMPLETE - `sound_manager.py` EXISTS at `src/backend/services/sound_manager.py`; `audio_importer.py` CREATED at `src/backend/adapters/audio_importer.py`
 > **Implementation approach:**
-> - `audio_importer.py`: Import custom audio files (MP3, WAV, M4A)
+> - ✅ `audio_importer.py`: Import custom audio files (MP3, WAV, M4A) - COMPLETE
 > - Max duration: 30 seconds
 > - Store in app sandbox, reference in `custom_sounds` table
 > - Validate format, transcode to normalized format
@@ -509,7 +509,7 @@ This document maps the specification requirements to implementation tasks, prior
 - ⚠️ `src/backend/services/message_templates.py` — templates at `src/test_server.py:373-584`, needs extraction per spec Section 10
 - ⚠️ `src/backend/services/feedback_loop.py` — NOT IMPLEMENTED, needs creation per spec Section 11
 - ⚠️ `src/backend/services/stats_service.py` — logic at `src/test_server.py:607-626`, needs extraction per spec Section 11
-- ❌ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 **DOES NOT EXIST**
+- ✅ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 **CREATED at `src/backend/adapters/audio_importer.py`**
 
 ### TTS Cache Cleanup - VERIFIED
 - ⚠️ TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
@@ -534,7 +534,7 @@ Phase 2 (Backend Services) - MOSTLY COMPLETE
 ├── 10. Notification/Alarm ✅
 ├── 11. Calendar Integration ✅
 ├── 12. Location Awareness ✅
-└── 13. Sound Library ❌ (audio_importer.py NOT IMPLEMENTED)
+└── 13. Sound Library ✅ (audio_importer.py implemented)
 
 Phase 3 (Frontend) - NOT STARTED
 ├── 14. RN Project Setup
