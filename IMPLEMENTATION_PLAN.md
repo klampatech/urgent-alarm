@@ -431,8 +431,8 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 
 ### P0 — Critical Path
 
-#### 22. Unit Tests [IN PROGRESS]
-**Status:** ⚠️ In Progress — Creating tests/ directory structure and initial tests
+#### 22. Unit Tests [PENDING]
+**Status:** ⚠️ Pending — tests/ directory does NOT exist yet (verified 2026-04-09: `glob tests/**/*.py` returned no files)
 **Spec Ref:** Section 14
 **Task:** Write unit tests for backend services
 - Create `tests/` directory with `tests/unit/` subdirectories
@@ -444,7 +444,10 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 **Acceptance Criteria:** All unit tests pass
 **Files:** `tests/unit/test_chain_engine.py`, `tests/unit/test_reminder_parser.py`, `tests/unit/test_tts_adapter.py`, `tests/unit/test_llm_adapter.py`
 
-> **Status:** ⚠️ Started 2026-04-09 — Creating tests/ directory and writing unit tests for chain engine
+> **Status:** ❌ NOT STARTED - tests/ directory DOES NOT EXIST (verified via glob)
+> - `glob tests/**/*.py` returned no files
+> - `grep -r "import pytest"` in project returned no results
+> - No test files exist anywhere in project
 
 #### 23. Integration Tests [PENDING]
 **Status:** ❌ NOT STARTED
