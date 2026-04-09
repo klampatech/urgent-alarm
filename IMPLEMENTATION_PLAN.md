@@ -15,7 +15,7 @@ This document maps the specification requirements to implementation tasks, prior
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
-| 10. Voice Personality | ⚠️ PARTIALLY COMPLETE | 5 personalities in `test_server.py:373-570`, but NOT in dedicated service files |
+| 10. Voice Personality | ⚠️ PARTIALLY COMPLETE | 5 personalities in `test_server.py:373-584`, but NOT in dedicated service files |
 | 11. History & Stats | ⚠️ PARTIALLY COMPLETE | `calculate_hit_rate` in `test_server.py:607-626`, but dedicated `stats_service.py` NOT created |
 | 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, but `audio_importer.py` not implemented |
 | 13. Data Persistence | ⚠️ Partial | Schema exists but missing `recurrence_rule`, quiet hours not persisted |
@@ -36,8 +36,8 @@ This document maps the specification requirements to implementation tasks, prior
 
 **⚠️ NOT IMPLEMENTED - Missing Service Files:**
 - ⚠️ No `chain_engine.py` — chain logic in `test_server.py:126-225` (URGENCY_TIERS, compute_escalation_chain, validate_chain, get_next_unfired_anchor)
-- ⚠️ No `voice_generator.py` — message generation needs extraction from `test_server.py:587-603`
-- ⚠️ No `message_templates.py` — VOICE_PERSONALITIES in `test_server.py:373-570`
+- ⚠️ No `voice_generator.py` — message generation in `test_server.py:587-603` (generate_voice_message)
+- ⚠️ No `message_templates.py` — VOICE_PERSONALITIES dict in `test_server.py:373-584`
 - ⚠️ No `feedback_loop.py` — drive_duration adjustment logic in `test_server.py:817-837`
 - ⚠️ No `stats_service.py` — `calculate_hit_rate` in `test_server.py:607-626`, missing `get_streak`/`get_common_miss_window`
 - ⚠️ No `audio_importer.py` — custom sound import not implemented
@@ -155,7 +155,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Status:** ⚠️ NEEDS EXTRACTION - Templates ARE defined in `test_server.py:373-570` (VOICE_PERSONALITIES dict with 5 personalities × 8 tiers × 3 variations), need dedicated service files
+> **Status:** ⚠️ NEEDS EXTRACTION - Templates ARE defined in `test_server.py:373-584` (VOICE_PERSONALITIES dict with 5 personalities × 8 tiers × 3 variations), need dedicated service files
 
 #### 6. TTS Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 4.3, 4.4
