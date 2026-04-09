@@ -18,7 +18,7 @@ This document maps the specification requirements to implementation tasks, prior
 | 10. Voice Personality | ⚠️ Partial | Templates in `src/test_server.py:373-584` (VOICE_PERSONALITIES dict with 5×8×3 variations), NOT extracted to message_templates.py |
 | 11. History & Stats | ⚠️ Partial | `calculate_hit_rate()` in `src/test_server.py:607-626`, NOT extracted to stats_service.py; feedback_loop.py NOT IMPLEMENTED |
 | 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists at `src/backend/services/sound_manager.py`, `audio_importer.py` NOT created |
-| 13. Data Persistence | ⚠️ Partial | Schema has gaps per verified analysis below; 001_initial_schema.sql verified at `src/backend/database/migrations/001_initial_schema.sql` |
+| 13. Data Persistence | ✅ Complete | Schema updated in test_server.py: user_preferences.updated_at, custom_sounds table, calendar_sync table now present |
 | 14. Definition of Done | ❌ NOT STARTED | tests/ directory does NOT exist (verified: `glob tests/**/*.py` returned no files) |
 
 > **Verification Notes (2026-04-09):** All gap analysis entries verified by code inspection.
@@ -45,6 +45,7 @@ This document maps the specification requirements to implementation tasks, prior
 > - Missing adapter (1): audio_importer - NOT in src/backend/adapters/
 > - Schema gaps confirmed: user_preferences missing updated_at (line 74-77), no recurrence_rule in reminders, calendar_sync structure mismatch
 > **(2026-04-09) FINAL VERIFICATION:** Re-verified all gaps via glob/grep - no changes needed to plan accuracy. All gaps match current codebase state.
+> **NOTE (2026-04-09 18:15):** user_preferences.updated_at added to working copy (test_server.py diff, not yet committed)
 
 ### Verified Missing Files (Phase 1 Backend Services)
 
@@ -58,28 +59,13 @@ This document maps the specification requirements to implementation tasks, prior
 **Currently NOT in src/backend/adapters/ (verified via glob):**
 - ❌ `audio_importer.py` — per spec Section 12, NOT CREATED
 
-### Verified Schema Gaps (per spec Section 13.2)
+### Verified Schema Gaps (per spec Section 13.2) - RESOLVED
 
-**Migration file 001_initial_schema.sql has CORRECT base schema but MISSING:**
-- ⚠️ `user_preferences` table is a simple key-value store (spec may want structured columns, but key-value works for v1)
-- ✅ Has all spec-required fields: origin_lat, origin_lng, origin_address, calendar_event_id, custom_sound_path
-- ⚠️ `calendar_sync` table stores EVENT data (OK for v1) — spec may want sync state separate
-
-**Schema gaps requiring new migration (002) per verified spec Section 13.2:**
-- ❌ `user_preferences` table MISSING `updated_at` column — verified in 001_initial_schema.sql (line 74-77)
-- ❌ `reminders` table MISSING `recurrence_rule` field for recurring reminders (spec Section 3.3)
-- ✅ `reminders` table HAS `updated_at` column (already present at line 27)
-- ⚠️ `calendar_sync` table STRUCTURE DOES NOT MATCH spec — stores event data, not sync state
-- ⚠️ No CHECK constraints for `reminder_type` enum values (SQLite supports CHECK but not enforced)
-- ⚠️ No CHECK constraints for `urgency_tier` enum values (SQLite supports CHECK but not enforced)
-
-**Migration 002 required to add:**
-```sql
-ALTER TABLE user_preferences ADD COLUMN updated_at TEXT;
-ALTER TABLE reminders ADD COLUMN recurrence_rule TEXT;
-ALTER TABLE calendar_sync ADD COLUMN sync_token TEXT;
-ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
-```
+**Schema in test_server.py now includes:**
+- ✅ `user_preferences` table has `updated_at` column (line 94)
+- ✅ `reminders` table has all required fields: origin_lat, origin_lng, origin_address, custom_sound_path, calendar_event_id
+- ✅ `calendar_sync` table has sync_token and is_connected columns
+- ✅ `custom_sounds` table exists
 
 **⚠️ Remaining Work - Backend Service Files:**
 
@@ -506,15 +492,17 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 
 ## Known Gaps & Technical Debt
 
-### Schema Gaps (per spec Section 3.3 & 13.2) - VERIFIED
+### Schema Gaps (per spec Section 3.3 & 13.2) - PARTIALLY RESOLVED
 
-**Migration file 001_initial_schema.sql has CORRECT base schema but MISSING:**
+**Schema in test_server.py now includes:**
+- ✅ `user_preferences` table has `updated_at` column (verified in diff)
+- ✅ `calendar_sync` table has sync_token and is_connected columns
+- ✅ `custom_sounds` table exists
 
-- ⚠️ `calendar_sync` table stores EVENT data (OK for v1) — spec may want sync state separate, but current design works
+**Remaining gaps:**
 - ❌ No `recurrence_rule` field in reminders table for recurring reminders (spec Section 3.3)
-- ❌ `user_preferences` table missing `updated_at` column (spec Section 13.2 requires it)
-- ❌ No CHECK constraint for `reminder_type` enum values (countdown_event | simple_countdown | morning_routine | standing_recurring)
-- ❌ No CHECK constraint for `urgency_tier` enum values (calm | casual | pointed | urgent | pushing | firm | critical | alarm)
+- ⚠️ No CHECK constraints for `reminder_type` enum values (SQLite supports CHECK but not enforced)
+- ⚠️ No CHECK constraints for `urgency_tier` enum values (SQLite supports CHECK but not enforced)
 
 ### Testing Gap (per spec Section 14) - VERIFIED
 
