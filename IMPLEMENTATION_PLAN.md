@@ -36,13 +36,14 @@ This document maps the specification requirements to implementation tasks, prior
 - Voice personality system with 5 personalities and 3+ variations per tier
 
 **⚠️ Schema Gaps (per spec Section 3.3 & 13.2):**
-- `reminder_type`: Only `countdown_event` supported — **missing** `simple_countdown`, `morning_routine`, `standing_recurring`
+- `reminder_type`: `countdown_event` and `simple_countdown` implemented (per code). **Missing:** `morning_routine`, `standing_recurring`
 - No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3)
 - No persistent streak counter for recurring reminders (spec Section 11.3)
+- Quiet hours not persisted to user_preferences table (config in memory only)
 
 **❌ Testing Gap:**
 - No unit, integration, or E2E tests exist (spec Section 14 requires all three)
-- `tests/` directory does not exist
+- No `tests/` directory (only `test_imports.py` exists)
 
 **❌ Missing Service Files (Technical Debt):**
 - No `src/backend/services/chain_engine.py` — chain logic embedded in `test_server.py:190-223`
