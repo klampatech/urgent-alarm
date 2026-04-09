@@ -88,7 +88,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 ### P0 — Critical Path
 
-#### 1. Database Migration System
+#### 1. Database Migration System ✅ COMPLETED
 **Spec Ref:** Section 13
 **Task:** Implement versioned SQLite migration system
 - Create migration runner (sequential versions: schema_v1, schema_v2, etc.)
@@ -97,6 +97,8 @@ This document maps the specification requirements to implementation tasks, prior
 - Enable foreign keys and WAL mode
 - **Acceptance Criteria:** Fresh install applies migrations in order, tests use clean in-memory DB
 **Files:** `src/backend/database/migrations/*.sql`, `src/backend/database/migrator.py`
+
+> **Implementation notes:** Implemented in `src/backend/database/migrations/001_initial_schema.sql` and `src/backend/database/migrator.py`. Full schema with all spec fields, version tracking table, in-memory mode support, proper SQL parsing with comment handling. Verified with in-memory test.
 
 #### 2. Chain Engine get_next_unfired_anchor + Unit Tests ✅ COMPLETED
 **Spec Ref:** Section 2.3, 2.4, 2.5
