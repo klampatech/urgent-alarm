@@ -89,7 +89,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-> **Status:** ⚠️ PARTIAL - `compute_escalation_chain()` exists in `test_server.py` but needs extraction to `src/backend/services/chain_engine.py`
+> **Status:** ⚠️ **VERIFIED GAP** - Logic exists in `src/test_server.py:138` but needs extraction to `src/backend/services/chain_engine.py`
 > **Implementation approach:**
 > - Define `UrgencyTier` enum matching spec: calm, casual, pointed, urgent, pushing, firm, critical, alarm
 > - `compute_escalation_chain(arrival_time, drive_duration)` → list of Anchor objects
@@ -138,10 +138,10 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Status:** ⚠️ PARTIAL - Templates and `generate_voice_message()` exist in `test_server.py`, need extraction to `src/backend/services/voice_generator.py` and `src/backend/services/message_templates.py`
+> **Status:** ⚠️ **VERIFIED GAP** - Templates exist in `src/test_server.py:373` (VOICE_PERSONALITIES dict), `generate_voice_message()` in test_server.py:587, need extraction to dedicated service files
 > **Implementation approach:**
 > - `voice_generator.py`: Generate messages given personality + urgency_tier + destination
-> - `message_templates.py`: 5 personalities × 8 tiers × 3+ variations (currently in test_server.py)
+> - `message_templates.py`: 5 personalities × 8 tiers × 3+ variations (currently in test_server.py:373)
 > - Personality options: Coach, Assistant, Best Friend, No-nonsense, Calm
 > - Custom mode: max 200 char user prompt appended to system prompt
 > - Store `voice_personality` in user_preferences, apply to new reminders
@@ -172,7 +172,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 7 test scenarios pass
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
 
-> **Status:** ⚠️ PARTIAL - `calculate_hit_rate()` exists in `test_server.py`, needs extraction to `src/backend/services/stats_service.py` and `src/backend/services/feedback_loop.py`
+> **Status:** ❌ **NOT STARTED** - `calculate_hit_rate()` exists in `test_server.py:607`, needs extraction to `src/backend/services/stats_service.py`; `feedback_loop.py` NOT created; No tests exist (spec Section 14 requires tests)
 > **Implementation approach:**
 > - `stats_service.py`: Compute from history table
 >   - `get_hit_rate(days=7)`: hits / (hits + misses) * 100
@@ -270,7 +270,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/sound_manager.py`, `src/backend/adapters/audio_importer.py`
 
-> **Status:** ❌ NOT STARTED - `sound_manager.py` EXISTS but `audio_importer.py` does NOT exist
+> **Status:** ❌ **NOT STARTED** - `sound_manager.py` EXISTS at `src/backend/services/sound_manager.py`; `audio_importer.py` DOES NOT EXIST
 > **Implementation approach:**
 > - `audio_importer.py`: Import custom audio files (MP3, WAV, M4A)
 > - Max duration: 30 seconds
@@ -399,7 +399,7 @@ This document maps the specification requirements to implementation tasks, prior
 ### P0 — Critical Path
 
 #### 22. Unit Tests [PENDING]
-**Status:** Pending — No unit tests exist
+**Status:** ❌ NOT STARTED — No unit tests exist, tests/ directory does not exist
 **Spec Ref:** Section 14
 **Task:** Write unit tests for backend services
 - Chain engine determinism tests (TC-01 through TC-06)
@@ -410,8 +410,10 @@ This document maps the specification requirements to implementation tasks, prior
 **Acceptance Criteria:** All unit tests pass
 **Files:** `tests/unit/test_chain_engine.py`, `tests/unit/test_reminder_parser.py`, `tests/unit/test_tts_adapter.py`, `tests/unit/test_llm_adapter.py`
 
+> **Status:** ❌ NOT STARTED - spec Section 14 requires tests for all acceptance criteria. No tests directory exists.
+
 #### 23. Integration Tests [PENDING]
-**Status:** Pending
+**Status:** ❌ NOT STARTED
 **Spec Ref:** Section 14
 **Task:** Write integration tests for critical flows
 - Full reminder creation flow (parse → chain → TTS → persist)
@@ -488,14 +490,14 @@ This document maps the specification requirements to implementation tasks, prior
 ## Dependency Map
 
 ```
-Phase 1 (Foundation) - PARTIALLY COMPLETE - Some logic in test_server.py
+Phase 1 (Foundation) - PARTIALLY COMPLETE - Logic in test_server.py needs extraction
 ├── 1. Database Migration System ✅
-├── 2. Chain Engine ⚠️ (logic in test_server.py, needs extraction to chain_engine.py)
+├── 2. Chain Engine ❌ (logic in test_server.py:138, NOT extracted to chain_engine.py)
 ├── 3. LLM Adapter Interface + Mock ✅
 ├── 4. Reminder Parser Integration ✅
-├── 5. Voice Personality Variations ⚠️ (templates in test_server.py, needs extraction)
+├── 5. Voice Personality Variations ❌ (templates in test_server.py:373, NOT extracted)
 ├── 6. TTS Adapter + Mock ✅
-├── 7. History/Stats/Feedback Loop ⚠️ (calculate_hit_rate in test_server.py, needs extraction)
+├── 7. History/Stats/Feedback Loop ❌ (calculate_hit_rate in test_server.py:607, NOT extracted; feedback_loop.py NOT created)
 └── 8. Snooze/Dismissal Flow ✅
 
 Phase 2 (Backend Services) - MOSTLY COMPLETE
@@ -503,7 +505,7 @@ Phase 2 (Backend Services) - MOSTLY COMPLETE
 ├── 10. Notification/Alarm ✅
 ├── 11. Calendar Integration ✅
 ├── 12. Location Awareness ✅
-└── 13. Sound Library ❌ (audio_importer.py not implemented)
+└── 13. Sound Library ❌ (audio_importer.py NOT created)
 
 Phase 3 (Frontend) - NOT STARTED
 ├── 14. RN Project Setup
@@ -516,6 +518,11 @@ Phase 3 (Frontend) - NOT STARTED
 └── 21. Sound Library (depends on 13)
 
 Phase 4 (Testing & Schema) - NOT STARTED
+├── 22. Unit Tests ❌ (tests/ directory does NOT exist)
+├── 23. Integration Tests ❌ (tests/ directory does NOT exist)
+├── 24. Schema Migration ❌ (missing columns per spec Section 13.2)
+└── 25. E2E Tests ❌ (mobile app not started)
+```
 ├── 22. Unit Tests (depends on phases 1-2 service extraction)
 ├── 23. Integration Tests (depends on 22)
 ├── 24. Schema Migration (add missing columns)
