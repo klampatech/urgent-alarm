@@ -7,7 +7,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ❌ NOT STARTED | No `chain_engine.py` - logic in `test_server.py:138-216` |
+| 2. Escalation Chain Engine | ⚠️ Partial | `test_server.py:138-225` has logic, NOT in dedicated service file |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `llm_adapter.py` |
 | 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist, but voice message generation needs dedicated service file |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
@@ -15,8 +15,8 @@ This document maps the specification requirements to implementation tasks, prior
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
-| 10. Voice Personality | ⚠️ Partial | 5 personalities exist, but `voice_generator.py` and `message_templates.py` not created |
-| 11. History & Stats | ⚠️ Partial | Logic exists but no dedicated `stats_service.py` or `feedback_loop.py` |
+| 10. Voice Personality | ⚠️ Partial | 5 personalities in `test_server.py:373-570`, NOT in dedicated `message_templates.py` |
+| 11. History & Stats | ⚠️ Partial | `calculate_hit_rate` in `test_server.py:607-626`, NOT in dedicated `stats_service.py` |
 | 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, but `audio_importer.py` not implemented |
 | 13. Data Persistence | ⚠️ Partial | Schema exists but missing `recurrence_rule`, quiet hours not persisted |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does not exist |
@@ -35,17 +35,17 @@ This document maps the specification requirements to implementation tasks, prior
 - Sound manager (built-in + custom import stub) ⚠️
 
 **❌ NOT IMPLEMENTED - Missing Service Files:**
-- ❌ No `chain_engine.py` — chain logic in `test_server.py:138-216`
+- ❌ No `chain_engine.py` — chain logic in `test_server.py:126-250` (URGENCY_TIERS, compute_escalation_chain, validate_chain, get_next_unfired_anchor)
 - ❌ No `voice_generator.py` — message generation needs extraction
-- ❌ No `message_templates.py` — message templates not extracted
-- ❌ No `feedback_loop.py` — feedback logic in `test_server.py`
-- ❌ No `stats_service.py` — stats computed inline in `test_server.py`
+- ❌ No `message_templates.py` — VOICE_PERSONALITIES in `test_server.py:373-570`
+- ❌ No `feedback_loop.py` — drive_duration adjustment logic not extracted
+- ❌ No `stats_service.py` — `calculate_hit_rate` in `test_server.py:607-626` only
 - ❌ No `audio_importer.py` — custom sound import not implemented
 
 **⚠️ Schema Gaps (per spec Section 3.3 & 13.2):**
-- `reminder_type`: `countdown_event` and `simple_countdown` implemented. **Missing:** `morning_routine`, `standing_recurring`
-- No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3)
-- No persistent streak counter for recurring reminders (spec Section 11.3)
+- `reminder_type`: Schema has `countdown_event`, `simple_countdown`. **Missing from schema:** `morning_routine`, `standing_recurring`
+- No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3) — NOT IN SCHEMA
+- No persistent streak counter for recurring reminders (spec Section 11.3) — NOT IN SCHEMA
 - Quiet hours not persisted to user_preferences table (config in memory only)
 
 **❌ Testing Gap:**
@@ -53,11 +53,11 @@ This document maps the specification requirements to implementation tasks, prior
 - No `tests/` directory created
 
 **❌ Missing Service Files (Technical Debt - Must Create):**
-- ❌ No `src/backend/services/chain_engine.py` — chain logic embedded in `test_server.py:138-216`
+- ❌ No `src/backend/services/chain_engine.py` — chain logic in `test_server.py:138-225` (URGENCY_TIERS dict, compute_escalation_chain, validate_chain, get_next_unfired_anchor)
 - ❌ No `src/backend/services/voice_generator.py` — voice message generation not extracted
-- ❌ No `src/backend/services/message_templates.py` — message templates not extracted
-- ❌ No `src/backend/services/feedback_loop.py` — feedback logic embedded in `test_server.py`
-- ❌ No `src/backend/services/stats_service.py` — stats computed inline in test_server.py
+- ❌ No `src/backend/services/message_templates.py` — message templates in `test_server.py:373-570` (VOICE_PERSONALITIES dict)
+- ❌ No `src/backend/services/feedback_loop.py` — feedback logic not extracted (needs drive_duration adjustment)
+- ❌ No `src/backend/services/stats_service.py` — stats logic in `test_server.py:607-626` (calculate_hit_rate only, no get_streak/get_common_miss_window)
 - ❌ No `src/backend/adapters/audio_importer.py` — custom sound import logic not implemented
 
 **❌ Remaining Work - Backend Service Files:**
@@ -114,7 +114,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - Logic EXISTS in `test_server.py:138-216` (URGENCY_TIERS dict, compute_escalation_chain(), validate_chain(), get_next_unfired_anchor()) but needs extraction to proper service module
+> **Status:** ❌ NOT IMPLEMENTED - Logic EXISTS in `test_server.py:126-250` (URGENCY_TIERS dict, compute_escalation_chain(), validate_chain(), get_next_unfired_anchor()) but needs extraction to proper service module
 
 #### 3. LLM Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 3.3, 3.4, 3.5
@@ -155,7 +155,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - Need to create dedicated service files. Voice personality templates ARE defined in `test_server.py:372-570` (VOICE_PERSONALITIES dict with 4 personalities × 8 tiers × 3 variations)
+> **Status:** ❌ NOT IMPLEMENTED - Need to create dedicated service files. Voice personality templates ARE defined in `test_server.py:373-570` (VOICE_PERSONALITIES dict with 5 personalities × 8 tiers × 3 variations)
 
 #### 6. TTS Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 4.3, 4.4
@@ -182,7 +182,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 7 test scenarios pass
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - Logic needs to be extracted from test_server.py to dedicated service files. Stats logic EXISTS in `test_server.py:572-650` (get_weekly_hit_rate, get_streak, get_common_miss_window functions)
+> **Status:** ❌ NOT IMPLEMENTED - Stats logic partially exists in test_server.py:607-626 (`calculate_hit_rate` only). `get_streak` and `get_common_miss_window` functions NOT IMPLEMENTED
 
 #### 8. Snooze & Dismissal Flow [x] COMPLETED
 **Spec Ref:** Section 9.3, 9.4
@@ -452,8 +452,8 @@ This document maps the specification requirements to implementation tasks, prior
 - ❌ `src/backend/services/chain_engine.py` — chain logic in `test_server.py:138-216` (URGENCY_TIERS, compute_escalation_chain, validate_chain, get_next_unfired_anchor)
 - ❌ `src/backend/services/voice_generator.py` — message generation logic in `test_server.py`
 - ❌ `src/backend/services/message_templates.py` — message templates in `test_server.py:372-570` (VOICE_PERSONALITIES dict)
-- ❌ `src/backend/services/feedback_loop.py` — feedback logic in `test_server.py:572-650`
-- ❌ `src/backend/services/stats_service.py` — stats logic in `test_server.py:572-650` (get_weekly_hit_rate, get_streak, get_common_miss_window)
+- ❌ `src/backend/services/feedback_loop.py` — drive_duration adjustment logic in `test_server.py:817-833` (destination_adjustments table)
+- ❌ `src/backend/services/stats_service.py` — `calculate_hit_rate` in `test_server.py:607-626`, `get_streak`/`get_common_miss_window` NOT IMPLEMENTED
 - ❌ `src/backend/adapters/audio_importer.py` — custom sound import not implemented
 
 ### Other Technical Debt
