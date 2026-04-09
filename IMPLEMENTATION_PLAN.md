@@ -108,7 +108,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 
 > **Implementation notes:** Implemented in `src/backend/database/migrations/001_initial_schema.sql` and `src/backend/database/migrator.py`. Full schema with all spec fields, version tracking table, in-memory mode support, proper SQL parsing with comment handling. Verified with in-memory test.
 
-#### 2. Chain Engine get_next_unfired_anchor + Unit Tests [PENDING]
+#### 2. Chain Engine + Unit Tests [PENDING]
 **Spec Ref:** Section 2.3, 2.4, 2.5
 **Task:** Create dedicated chain_engine.py service with full chain logic
 - Create `src/backend/services/chain_engine.py` with `compute_escalation_chain()`, `validate_chain()`, `get_next_unfired_anchor()`
