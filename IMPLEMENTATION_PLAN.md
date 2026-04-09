@@ -34,6 +34,7 @@ This document maps the specification requirements to implementation tasks, prior
 > - **tests/ directory verified NOT existing (glob returned no files)**
 > - **Schema verified:** 001_initial_schema.sql exists but missing `updated_at` in user_preferences table per spec Section 13.2
 > - **(2026-04-09) Task 22 PENDING:** tests/ directory does NOT exist - needs creation
+> **(2026-04-09 14:35) REFINED:** Verified via glob - all service/adapter files confirmed, test_server.py chain logic confirmed, no new gaps identified beyond those already listed in the plan
 
 ### Verified Missing Files (Phase 1 Backend Services)
 
@@ -113,7 +114,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 
 > **Implementation notes:** Implemented in `src/backend/database/migrations/001_initial_schema.sql` and `src/backend/database/migrator.py`. Full schema with all spec fields, version tracking table, in-memory mode support, proper SQL parsing with comment handling. Verified with in-memory test.
 
-#### 2. Chain Engine + Unit Tests [PENDING]
+#### 2. Chain Engine + Unit Tests [NOT STARTED - logic in test_server.py]
 **Spec Ref:** Section 2.3, 2.4, 2.5
 **Task:** Create dedicated chain_engine.py service with full chain logic
 - Create `src/backend/services/chain_engine.py` with `compute_escalation_chain()`, `validate_chain()`, `get_next_unfired_anchor()`
@@ -164,7 +165,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 
 ## P1 — High Priority
 
-#### 5. Voice Personality System with Variations [PENDING]
+#### 5. Voice Personality System with Variations [NOT STARTED - templates in test_server.py]
 **Spec Ref:** Section 10.3, 10.4
 **Task:** Create dedicated voice_generator.py and message_templates.py
 - Create `src/backend/services/voice_generator.py` for message generation
@@ -198,7 +199,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 
 > **Implementation notes:** Implemented ITTSAdapter interface in `tts_adapter.py` with TTSResult dataclass and TTSError. Created ElevenLabsAdapter in `elevenlabs_adapter.py` with API integration, voice presets, and caching at `/tmp/tts_cache/{reminder_id}/`. MockTTSAdapter in `mock_tts.py` creates minimal valid MP3 placeholders. Verified with import tests.
 
-#### 7. History, Stats & Feedback Loop [PENDING]
+#### 7. History, Stats & Feedback Loop [NOT STARTED - stats in test_server.py, feedback_loop.py not implemented]
 **Spec Ref:** Section 11.3, 11.4
 **Task:** Create dedicated stats_service.py and feedback_loop.py
 - Create `src/backend/services/stats_service.py` for hit rate, streak, common miss window
@@ -295,7 +296,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 
 > **Implementation notes:** Implemented `location_adapter.py` with `ILocationAdapter` interface, `Location` and `LocationCheckResult` dataclasses, `LocationAdapter` implementation with `is_permission_granted()`, `request_permission()`, `get_current_location()`, `calculate_distance()` (Haversine formula), `check_departure_location()`, `should_escalate_at_departure()`, `set_origin_for_reminder()`, `use_current_location_as_origin()`, and mock location support. 500m geofence radius (`GEOFENCE_RADIUS_METERS`). All spec requirements implemented.
 
-#### 13. Sound Library [PENDING]
+#### 13. Sound Library [NOT STARTED - audio_importer.py missing]
 **Spec Ref:** Section 12.3, 12.4
 **Task:** Implement sound selection and custom import
 - Bundle 5 built-in sounds per category (commute, routine, errand) - ✅ DONE (bundled, no actual audio files)
@@ -316,7 +317,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 > - Validate format, transcode to normalized format
 > - Fallback to category default on corrupted file
 
-#### 14. Schema: Add Missing Columns [PENDING]
+#### 14. Schema: Add Missing Columns [NOT STARTED - migration needed]
 **Spec Ref:** Section 13.2
 **Task:** Add missing schema columns via migration
 - Add `updated_at` column to `user_preferences` table
@@ -337,7 +338,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 ### P0 — Critical Path
 
 #### 14. React Native Project Setup
-**Status:** Pending — No mobile project exists yet
+**Status:** NOT STARTED — No mobile project exists yet
 **Task:** Initialize React Native project with required dependencies
 - Initialize with React Native CLI or Expo
 - Install: notifee, @react-native-community/geolocation, react-native-fs, @react-native-async-storage/async-storage
@@ -346,7 +347,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 - **Files:** `mobile/`, `mobile/ios/`, `mobile/android/`
 
 #### 15. Quick Add Interface
-**Status:** Pending
+**Status:** NOT STARTED
 **Spec Ref:** Section 3.2
 **Task:** Build reminder creation UI
 - Text/speech input field
@@ -358,7 +359,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 **Files:** `mobile/src/screens/QuickAddScreen.tsx`, `mobile/src/components/ParseConfirmationCard.tsx`
 
 #### 16. Reminders List & Management
-**Status:** Pending
+**Status:** NOT STARTED
 **Task:** Build reminder list and CRUD operations
 - List all reminders with status indicators
 - Create, read, update, delete reminders
@@ -368,7 +369,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 **Files:** `mobile/src/screens/RemindersListScreen.tsx`, `mobile/src/components/ReminderCard.tsx`
 
 #### 17. Active Alarm Screen
-**Status:** Pending
+**Status:** NOT STARTED
 **Spec Ref:** Section 5.2
 **Task:** Build full-screen alarm display when anchor fires
 - Display destination, time remaining, voice personality icon
@@ -380,7 +381,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 **Files:** `mobile/src/screens/ActiveAlarmScreen.tsx`, `mobile/src/components/SnoozePicker.tsx`
 
 #### 18. Settings & Preferences
-**Status:** Pending
+**Status:** NOT STARTED
 **Spec Ref:** Section 10.1
 **Task:** Build settings UI
 - Voice personality selector (5 + custom)
@@ -392,7 +393,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 **Files:** `mobile/src/screens/SettingsScreen.tsx`, `mobile/src/stores/preferencesStore.ts`
 
 #### 19. History & Stats Screen
-**Status:** Pending
+**Status:** NOT STARTED
 **Spec Ref:** Section 11.2
 **Task:** Build history and statistics UI
 - Weekly hit rate display
@@ -407,7 +408,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 ### P1 — High Priority
 
 #### 20. Calendar Tab
-**Status:** Pending
+**Status:** NOT STARTED
 **Spec Ref:** Section 7.2
 **Task:** Build calendar integration UI
 - Sync status indicator
@@ -418,7 +419,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 **Files:** `mobile/src/screens/CalendarScreen.tsx`, `mobile/src/components/CalendarSuggestionCard.tsx`
 
 #### 21. Sound Library UI
-**Status:** Pending
+**Status:** NOT STARTED
 **Spec Ref:** Section 12.2
 **Task:** Build sound selection UI
 - Category tabs (commute, routine, errand, custom)
@@ -436,8 +437,8 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 
 ### P0 — Critical Path
 
-#### 22. Unit Tests [PENDING]
-**Status:** ⚠️ Pending — tests/ directory does NOT exist yet (verified 2026-04-09: `glob tests/**/*.py` returned no files)
+#### 22. Unit Tests [NOT STARTED]
+**Status:** ⚠️ NOT STARTED — tests/ directory does NOT exist yet (verified 2026-04-09: `glob tests/**/*.py` returned no files)
 **Spec Ref:** Section 14
 **Task:** Write unit tests for backend services
 - Create `tests/` directory with `tests/unit/` subdirectories
@@ -454,7 +455,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 > - `grep -r "import pytest"` in project returned no results
 > - No test files exist anywhere in project
 
-#### 23. Integration Tests [PENDING]
+#### 23. Integration Tests [NOT STARTED]
 **Status:** ❌ NOT STARTED
 **Spec Ref:** Section 14
 **Task:** Write integration tests for critical flows
@@ -467,8 +468,8 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 
 ### P1 — High Priority
 
-#### 24. Schema Migration: Reminder Types [PENDING]
-**Status:** Pending
+#### 24. Schema Migration: Reminder Types [NOT STARTED]
+**Status:** NOT STARTED
 **Spec Ref:** Section 3.3
 **Task:** Add migration for missing reminder types
 - Add `reminder_type` enum values: `simple_countdown`, `morning_routine`, `standing_recurring`
@@ -478,7 +479,7 @@ ALTER TABLE calendar_sync ADD COLUMN is_connected INTEGER DEFAULT 0;
 **Files:** `src/backend/database/migrations/002_reminder_types.sql`
 
 #### 25. E2E Tests (Detox)
-**Status:** Pending
+**Status:** NOT STARTED
 **Spec Ref:** Section 14
 **Task:** Write end-to-end tests for critical user journeys
 - Quick Add flow (input → parse → confirm → create)
