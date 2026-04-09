@@ -23,7 +23,7 @@ This document maps the specification requirements to implementation tasks, prior
 ### Current Implementation Status
 
 **✅ Backend Complete (Phases 1-2):**
-- SQLite with 8 tables: reminders, anchors, history, destination_adjustments, user_preferences, custom_sounds, calendar_sync, schema_versions
+- SQLite with 7 tables: reminders, anchors, history, destination_adjustments, user_preferences, custom_sounds, calendar_sync
 - Chain engine (`compute_escalation_chain`, `get_next_unfired_anchor`)
 - LLM adapter interface + MiniMax + Mock implementations
 - TTS adapter interface + ElevenLabs + Mock implementations
@@ -42,6 +42,15 @@ This document maps the specification requirements to implementation tasks, prior
 
 **❌ Testing Gap:**
 - No unit, integration, or E2E tests exist (spec Section 14 requires all three)
+- `tests/` directory does not exist
+
+**❌ Missing Service Files (Technical Debt):**
+- No `src/backend/services/chain_engine.py` — chain logic embedded in `test_server.py:190-223`
+- No `src/backend/services/voice_generator.py` — voice message generation embedded in `test_server.py:401-570`
+- No `src/backend/services/message_templates.py` — message templates embedded inline
+- No `src/backend/services/feedback_loop.py` — feedback logic embedded in `test_server.py:765-776`
+- No `src/backend/services/stats_service.py` — stats computed inline in test_server.py
+- No `src/backend/adapters/audio_importer.py` — custom sound import logic not implemented
 
 **❌ Remaining Work:**
 
@@ -60,7 +69,7 @@ This document maps the specification requirements to implementation tasks, prior
 - No integration tests implemented
 - No E2E tests (Detox)
 
-*Technical Debt:*
+*Technical Debt (Refactoring Needed):*
 - `src/test_server.py` is a monolithic 600+ line proof-of-concept — needs refactoring into proper service modules
 - TTS cache cleanup not automated
 
@@ -433,7 +442,16 @@ This document maps the specification requirements to implementation tasks, prior
 - **Files:** `tests/integration/test_reminder_flow.py`, etc.
 
 ### Technical Debt
-- `src/test_server.py` contains monolithic chain engine logic — needs refactoring to `src/backend/services/chain_engine.py`
+
+**Missing Service Files (refactor from test_server.py):**
+- No `src/backend/services/chain_engine.py` — chain logic embedded in `test_server.py:190-223`
+- No `src/backend/services/voice_generator.py` — voice message generation embedded in `test_server.py:401-570`
+- No `src/backend/services/message_templates.py` — message templates embedded inline
+- No `src/backend/services/feedback_loop.py` — feedback logic embedded in `test_server.py:765-776`
+- No `src/backend/services/stats_service.py` — stats computed inline in test_server.py
+- No `src/backend/adapters/audio_importer.py` — custom sound import logic not implemented
+
+**Other Technical Debt:**
 - `src/backend/services/notification_manager.py` implements DND handling inline — spec calls for separate `dnd_handler.py`
 - `src/backend/services/scheduler.py` implements recovery scan inline — spec calls for separate `recovery_scan.py`
 - TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
