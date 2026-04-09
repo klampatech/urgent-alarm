@@ -108,6 +108,14 @@ This document maps the specification requirements to implementation tasks, prior
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
 > **Status:** ❌ NOT STARTED - No chain_engine.py exists, must implement per spec Section 2
+> **Implementation approach:**
+> - Define `UrgencyTier` enum matching spec: calm, casual, pointed, urgent, pushing, firm, critical, alarm
+> - `compute_escalation_chain(arrival_time, drive_duration)` → list of Anchor objects
+> - Buffer ≥25 min: 8 anchors (full chain)
+> - Buffer 10-24 min: 5 anchors (skip calm/casual, start at urgent)
+> - Buffer ≤5 min: 3 anchors (firm, critical, alarm)
+> - `validate_chain()`: reject if drive_duration > (arrival_time - now)
+> - `get_next_unfired_anchor(reminder_id)`: returns earliest unfired anchor sorted by timestamp
 
 #### 3. LLM Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 3.3, 3.4, 3.5
@@ -149,6 +157,13 @@ This document maps the specification requirements to implementation tasks, prior
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
 > **Status:** ❌ NOT STARTED - voice_generator.py and message_templates.py do not exist, must implement per spec Section 10
+> **Implementation approach:**
+> - `voice_generator.py`: Generate messages given personality + urgency_tier + destination
+> - `message_templates.py`: 5 personalities × 8 tiers × 3+ variations
+> - Personality options: Coach, Assistant, Best Friend, No-nonsense, Calm
+> - Custom mode: max 200 char user prompt appended to system prompt
+> - Store `voice_personality` in user_preferences, apply to new reminders
+> - Existing reminders retain personality from creation time
 
 #### 6. TTS Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 4.3, 4.4
@@ -176,6 +191,14 @@ This document maps the specification requirements to implementation tasks, prior
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
 
 > **Status:** ❌ NOT STARTED - stats_service.py and feedback_loop.py do not exist, must implement per spec Section 11
+> **Implementation approach:**
+> - `stats_service.py`: Compute from history table
+>   - `get_hit_rate(days=7)`: hits / (hits + misses) * 100
+>   - `get_streak(reminder_id)`: consecutive hits for recurring reminders
+>   - `get_common_miss_window()`: most frequently missed urgency tier
+> - `feedback_loop.py`: Adjust drive_duration on dismissal feedback
+>   - `adjust_drive_duration(destination, feedback_type)`: late → +2 min, capped at +15
+>   - Store adjustments in `destination_adjustments` table
 
 #### 8. Snooze & Dismissal Flow [x] COMPLETED
 **Spec Ref:** Section 9.3, 9.4
@@ -266,6 +289,12 @@ This document maps the specification requirements to implementation tasks, prior
 **Files:** `src/backend/services/sound_manager.py`, `src/backend/adapters/audio_importer.py`
 
 > **Status:** ❌ NOT STARTED - `sound_manager.py` exists, `audio_importer.py` NOT YET CREATED. Note: Built-in sounds stub exists in sound_manager.py, actual audio files not included
+> **Implementation approach:**
+> - `audio_importer.py`: Import custom audio files (MP3, WAV, M4A)
+> - Max duration: 30 seconds
+> - Store in app sandbox, reference in `custom_sounds` table
+> - Validate format, transcode to normalized format
+> - Fallback to category default on corrupted file
 
 ---
 
@@ -428,17 +457,21 @@ This document maps the specification requirements to implementation tasks, prior
 ## Known Gaps & Technical Debt
 
 ### Schema Gaps (per spec Section 3.3 & 13.2)
-- **Reminder types:** Schema supports `countdown_event` — spec also requires `simple_countdown`, `morning_routine`, `standing_recurring`
+- **Reminder types:** Schema has `countdown_event` DEFAULT — spec requires explicit enum: `simple_countdown`, `morning_routine`, `standing_recurring` — need migration to add CHECK constraint
 - **Recurring reminders:** No `recurrence_rule` field in reminders table (spec Section 1.3, 3.3, 9.3 mentions standing/recurring with RRULE support)
-- **Streak tracking:** No persistent streak counter field in schema (spec Section 11.3)
+- **Streak tracking:** No persistent streak counter field in schema (spec Section 11.3) — can be computed from history
 - **Quiet hours:** Not persisted to `user_preferences` table (config in memory only)
-- **User preferences:** Missing `updated_at` column per spec Section 13.2
+- **User preferences:** Has `key, value` but missing `updated_at` column per spec Section 13.2
 
 ### Testing Gap (per spec Section 14)
 - **No tests directory exists** — spec Section 14 requires unit, integration, and E2E tests
 - No unit tests for chain engine, parser, adapters
 - No integration tests for reminder creation flow
 - No E2E tests (Detox) for mobile app
+- **Action needed:** Create `tests/` directory with:
+  - `tests/unit/test_chain_engine.py` - TC-01 through TC-06
+  - `tests/integration/test_reminder_flow.py` - full creation flow
+  - `tests/e2e/*.spec.ts` - Detox tests
 
 ### Missing Service Files (per spec Section 2-12)
 
