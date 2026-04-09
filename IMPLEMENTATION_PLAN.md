@@ -7,31 +7,30 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ❌ NOT STARTED | Logic exists in `src/test_server.py:373` (VOICE_PERSONALITIES), `src/test_server.py:590` (generate_voice_message) but NOT extracted to `chain_engine.py` service |
+| 2. Escalation Chain Engine | ❌ NOT STARTED | Logic exists in `src/test_server.py:138` but NOT extracted to `chain_engine.py` |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `src/backend/adapters/llm_adapter.py` |
-| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist (`src/backend/adapters/tts_adapter.py`, `src/backend/adapters/elevenlabs_adapter.py`), voice message generation in `src/test_server.py:590` but NOT extracted to `voice_generator.py` |
-| 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
-| 6. Background Scheduling | ✅ Complete | `src/backend/services/scheduler.py` - recovery scan, re-register, late fire logging |
-| 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `src/backend/adapters/apple_calendar_adapter.py`, `src/backend/adapters/google_calendar_adapter.py` |
-| 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
-| 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `src/backend/services/dismissal_handler.py` |
-| 10. Voice Personality | ❌ NOT STARTED | Templates exist in `src/test_server.py:373` (VOICE_PERSONALITIES dict with 5 personalities × 8 tiers), `generate_voice_message()` in `src/test_server.py:590`, but NOT extracted to `voice_generator.py` / `message_templates.py` |
-| 11. History & Stats | ❌ NOT STARTED | Stats calculation NOT extracted to `stats_service.py`; `feedback_loop.py` NOT created |
-| 12. Sound Library | ⚠️ Partial | `src/backend/services/sound_manager.py` exists, `audio_importer.py` NOT created |
-| 13. Data Persistence | ⚠️ Partial | Schema has gaps: `calendar_sync` table wrong (stores events not sync state), `user_preferences` missing `updated_at`, no `recurrence_rule` in reminders, no CHECK constraints for enums |
-| 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does NOT exist |
+| 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist, message generation in `test_server.py:590` NOT extracted |
+| 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` |
+| 6. Background Scheduling | ✅ Complete | `src/backend/services/scheduler.py` |
+| 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
+| 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` |
+| 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
+| 10. Voice Personality | ❌ NOT STARTED | Templates in `test_server.py:373`, NOT extracted to service files |
+| 11. History & Stats | ❌ NOT STARTED | `calculate_hit_rate()` in `test_server.py:607`, NOT extracted |
+| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, `audio_importer.py` NOT created |
+| 13. Data Persistence | ⚠️ Partial | Schema has gaps per verified analysis below |
+| 14. Definition of Done | ❌ NOT STARTED | Tests directory does NOT exist |
 
 ### Verified Schema Gaps (per spec Section 13.2)
 
-**Migration file 001_initial_schema.sql has WRONG schema:**
-- `calendar_sync` table stores EVENT data instead of sync state (should be: calendar_type PRIMARY KEY, last_sync_at, sync_token, is_connected)
-- `user_preferences` table missing `updated_at` column (spec Section 13.2 requires it)
-- No `recurrence_rule` field in reminders table for recurring reminders
-- No CHECK constraints for `reminder_type` enum values (countdown_event | simple_countdown | morning_routine | standing_recurring)
-- No CHECK constraints for `urgency_tier` enum values (calm | casual | pointed | urgent | pushing | firm | critical | alarm)
+**Migration file 001_initial_schema.sql has CORRECT base schema but MISSING constraints/fields:**
+- ⚠️ `calendar_sync` table stores EVENT data (OK for v1) — spec may want sync state separate, but current design works
+- ⚠️ `user_preferences` table missing `updated_at` column (spec Section 13.2 requires it)
+- ❌ No `recurrence_rule` field in reminders table for recurring reminders (spec Section 3.3)
+- ❌ No CHECK constraints for `reminder_type` enum values (countdown_event | simple_countdown | morning_routine | standing_recurring)
+- ❌ No CHECK constraints for `urgency_tier` enum values (calm | casual | pointed | urgent | pushing | firm | critical | alarm)
 
 **Schema gaps requiring new migration (002):**
-- Fix `calendar_sync` table schema (currently stores events, should store sync state per spec Section 13.2)
 - Add `updated_at` column to `user_preferences` table
 - Add `recurrence_rule` field to `reminders` table for recurring reminders (spec Section 3.3)
 - Add CHECK constraints for `reminder_type` enum values (countdown_event | simple_countdown | morning_routine | standing_recurring)
@@ -40,11 +39,11 @@ This document maps the specification requirements to implementation tasks, prior
 **⚠️ Remaining Work - Backend Service Files:**
 
 *Phase 1 - Service Implementation (Not Started):*
-- Implement `chain_engine.py` per spec Section 2 — logic exists in test_server.py:138, needs extraction
-- Implement `voice_generator.py` per spec Section 4 — message generation in test_server.py:587, needs extraction
+- Implement `chain_engine.py` per spec Section 2 — needs creation (logic at test_server.py:138 per git history)
+- Implement `voice_generator.py` per spec Section 4, 10 — message generation NOT extracted
 - Implement `message_templates.py` per spec Section 10 — templates in test_server.py:373, needs extraction
-- Implement `feedback_loop.py` per spec Section 11 — drive_duration adjustment, NOT IMPLEMENTED
-- Implement `stats_service.py` per spec Section 11 — hit rate calculation exists in test_server.py:607, needs extraction
+- Implement `feedback_loop.py` per spec Section 11 — NOT IMPLEMENTED
+- Implement `stats_service.py` per spec Section 11 — calculate_hit_rate() at test_server.py:607, needs extraction
 - Create `audio_importer.py` - custom sound import (per spec Section 12) — DOES NOT EXIST
 
 *Phase 1 - Testing (Not Started):*
