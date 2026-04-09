@@ -7,7 +7,7 @@ This document maps the specification requirements to implementation tasks, prior
 
 | Spec Section | Status | Verified Code Reference |
 |-------------|--------|------------------------|
-| 2. Escalation Chain Engine | ⚠️ PARTIALLY COMPLETE | Logic needs to be implemented per spec Section 2, no chain_engine.py created |
+| 2. Escalation Chain Engine | ❌ NOT STARTED | No chain_engine.py exists - needs creation per spec Section 2 |
 | 3. Reminder Parsing | ✅ Complete | `src/backend/services/reminder_parser.py`, LLM adapter interface in `llm_adapter.py` |
 | 4. Voice & TTS Generation | ⚠️ Partial | TTS adapters exist, but voice_generator.py NOT created |
 | 5. Notification & Alarm | ✅ Complete | `src/backend/services/notification_manager.py` - tier sounds, DND, quiet hours, chain overlap |
@@ -15,15 +15,15 @@ This document maps the specification requirements to implementation tasks, prior
 | 7. Calendar Integration | ✅ Complete | `src/backend/adapters/calendar_adapter.py`, `apple_calendar_adapter.py`, `google_calendar_adapter.py` |
 | 8. Location Awareness | ✅ Complete | `src/backend/adapters/location_adapter.py` - 500m geofence, single-point check, escalation |
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
-| 10. Voice Personality | ⚠️ PARTIALLY COMPLETE | Needs dedicated service files per spec Section 10 |
-| 11. History & Stats | ⚠️ PARTIALLY COMPLETE | Needs stats_service.py implementation (hit_rate, streak, common_miss_window) |
+| 10. Voice Personality | ❌ NOT STARTED | No voice_generator.py or message_templates.py created per spec Section 10 |
+| 11. History & Stats | ❌ NOT STARTED | No stats_service.py or feedback_loop.py created per spec Section 11 |
 | 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, but `audio_importer.py` not implemented |
-| 13. Data Persistence | ⚠️ Partial | Schema exists but missing `recurrence_rule`, quiet hours not persisted |
+| 13. Data Persistence | ⚠️ Partial | Schema exists but missing `recurrence_rule`, streak counter, user_preferences `updated_at` |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does not exist |
 
 ### Current Implementation Status
 
-**⚠️ Backend Services Implemented (Phases 1-2 - PARTIAL):**
+**✅ Backend Services Implemented (Phases 1-2 - MOSTLY COMPLETE):**
 - SQLite with 7 tables: reminders, anchors, history, destination_adjustments, user_preferences, custom_sounds, calendar_sync (schema complete)
 - LLM adapter interface + MiniMax + Mock implementations ✅
 - TTS adapter interface + ElevenLabs + Mock implementations ✅
@@ -34,32 +34,25 @@ This document maps the specification requirements to implementation tasks, prior
 - Snooze/Dismissal handlers ✅
 - Sound manager (built-in + custom import stub) ⚠️
 
-**⚠️ NOT IMPLEMENTED - Missing Service Files:**
-- ⚠️ No `chain_engine.py` — chain logic needs implementation per spec Section 2
-- ⚠️ No `voice_generator.py` — message generation needs implementation per spec Section 4
-- ⚠️ No `message_templates.py` — message templates need implementation per spec Section 10
-- ⚠️ No `feedback_loop.py` — drive_duration adjustment logic needs implementation per spec Section 11
-- ⚠️ No `stats_service.py` — stats logic needs implementation (hit_rate, streak, common_miss_window per spec Section 11)
-- ⚠️ No `audio_importer.py` — custom sound import not implemented
+**❌ NOT IMPLEMENTED - Missing Service Files:**
+- ❌ No `chain_engine.py` — chain logic per spec Section 2 NOT STARTED
+- ❌ No `voice_generator.py` — message generation per spec Section 4 NOT STARTED
+- ❌ No `message_templates.py` — message templates per spec Section 10 NOT STARTED
+- ❌ No `feedback_loop.py` — drive_duration adjustment logic per spec Section 11 NOT STARTED
+- ❌ No `stats_service.py` — stats logic per spec Section 11 (hit_rate, streak, common_miss_window) NOT STARTED
+- ❌ No `audio_importer.py` — custom sound import per spec Section 12 NOT STARTED
 
 **⚠️ Schema Gaps (per spec Section 3.3 & 13.2):**
 - `reminder_type`: Schema has `countdown_event` DEFAULT. **Missing explicit enum values:** `simple_countdown`, `morning_routine`, `standing_recurring`
 - No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3) — NOT IN SCHEMA
 - No persistent streak counter for recurring reminders (spec Section 11.3) — NOT IN SCHEMA
+- No persistent streak counter field in reminders table (spec Section 11.3) — NOT IN SCHEMA
 - Quiet hours not persisted to user_preferences table (config in memory only)
 - user_preferences table missing `updated_at` column (spec Section 13.2)
 
 **❌ Testing Gap:**
 - No unit, integration, or E2E tests exist (spec Section 14 requires all three)
 - No `tests/` directory created
-
-**❌ Missing Service Files (Technical Debt - Must Create):**
-- ❌ No `src/backend/services/chain_engine.py` — chain logic needs implementation per spec Section 2
-- ❌ No `src/backend/services/voice_generator.py` — voice message generation needs implementation
-- ❌ No `src/backend/services/message_templates.py` — message templates per spec Section 10
-- ❌ No `src/backend/services/feedback_loop.py` — feedback logic per spec Section 11
-- ❌ No `src/backend/services/stats_service.py` — stats logic incomplete (missing streak/common_miss_window)
-- ❌ No `src/backend/adapters/audio_importer.py` — custom sound import not implemented
 
 **⚠️ Remaining Work - Backend Service Files:**
 
@@ -115,7 +108,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-> **Status:** ⚠️ NEEDS IMPLEMENTATION - No chain_engine.py exists, must implement per spec Section 2
+> **Status:** ❌ NOT STARTED - No chain_engine.py exists, must implement per spec Section 2
 
 #### 3. LLM Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 3.3, 3.4, 3.5
@@ -156,7 +149,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Status:** ⚠️ NEEDS IMPLEMENTATION - voice_generator.py and message_templates.py do not exist, must implement per spec Section 10
+> **Status:** ❌ NOT STARTED - voice_generator.py and message_templates.py do not exist, must implement per spec Section 10
 
 #### 6. TTS Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 4.3, 4.4
@@ -183,7 +176,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 7 test scenarios pass
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
 
-> **Status:** ⚠️ NEEDS IMPLEMENTATION - stats_service.py and feedback_loop.py do not exist, must implement per spec Section 11
+> **Status:** ❌ NOT STARTED - stats_service.py and feedback_loop.py do not exist, must implement per spec Section 11
 
 #### 8. Snooze & Dismissal Flow [x] COMPLETED
 **Spec Ref:** Section 9.3, 9.4
@@ -273,7 +266,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/sound_manager.py`, `src/backend/adapters/audio_importer.py`
 
-> **Status:** ⚠️ NEEDS IMPLEMENTATION - `sound_manager.py` exists, `audio_importer.py` NOT YET CREATED. Note: Built-in sounds stub exists in sound_manager.py, actual audio files not included
+> **Status:** ❌ NOT STARTED - `sound_manager.py` exists, `audio_importer.py` NOT YET CREATED. Note: Built-in sounds stub exists in sound_manager.py, actual audio files not included
 
 ---
 
@@ -451,12 +444,12 @@ This document maps the specification requirements to implementation tasks, prior
 ### Missing Service Files (per spec Section 2-12)
 
 **These files MUST be created per spec sections:**
-- ❌ `src/backend/services/chain_engine.py` — chain logic per spec Section 2
-- ❌ `src/backend/services/voice_generator.py` — message generation per spec Section 4
-- ❌ `src/backend/services/message_templates.py` — message templates per spec Section 10
-- ❌ `src/backend/services/feedback_loop.py` — drive_duration adjustment per spec Section 11
-- ❌ `src/backend/services/stats_service.py` — stats per spec Section 11 (hit_rate, streak, common_miss_window)
-- ❌ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12
+- ❌ `src/backend/services/chain_engine.py` — chain logic per spec Section 2 **NOT STARTED**
+- ❌ `src/backend/services/voice_generator.py` — message generation per spec Section 4 **NOT STARTED**
+- ❌ `src/backend/services/message_templates.py` — message templates per spec Section 10 **NOT STARTED**
+- ❌ `src/backend/services/feedback_loop.py` — drive_duration adjustment per spec Section 11 **NOT STARTED**
+- ❌ `src/backend/services/stats_service.py` — stats per spec Section 11 (hit_rate, streak, common_miss_window) **NOT STARTED**
+- ❌ `src/backend/adapters/audio_importer.py` — custom sound import per spec Section 12 **NOT STARTED**
 
 ### Other Technical Debt
 - TTS cache directory (`/tmp/tts_cache/`) not cleaned up automatically
@@ -466,14 +459,14 @@ This document maps the specification requirements to implementation tasks, prior
 ## Dependency Map
 
 ```
-Phase 1 (Foundation) - PARTIALLY COMPLETE - Service Files NEED IMPLEMENTATION
+Phase 1 (Foundation) - PARTIALLY COMPLETE - Service Files NOT STARTED
 ├── 1. Database Migration System ✅
-├── 2. Chain Engine + get_next_unfired_anchor ⚠️ (not implemented)
+├── 2. Chain Engine + get_next_unfired_anchor ❌ (not implemented)
 ├── 3. LLM Adapter Interface + Mock ✅
 ├── 4. Reminder Parser Integration ✅
-├── 5. Voice Personality Variations ⚠️ (not implemented)
+├── 5. Voice Personality Variations ❌ (not implemented)
 ├── 6. TTS Adapter + Mock ✅
-├── 7. History/Stats/Feedback Loop ⚠️ (not implemented)
+├── 7. History/Stats/Feedback Loop ❌ (not implemented)
 └── 8. Snooze/Dismissal Flow ✅
 
 Phase 2 (Backend Services) - MOSTLY COMPLETE
@@ -481,7 +474,7 @@ Phase 2 (Backend Services) - MOSTLY COMPLETE
 ├── 10. Notification/Alarm ✅
 ├── 11. Calendar Integration ✅
 ├── 12. Location Awareness ✅
-└── 13. Sound Library ⚠️ (audio_importer.py not implemented)
+└── 13. Sound Library ❌ (audio_importer.py not implemented)
 
 Phase 3 (Frontend) - NOT STARTED
 ├── 14. RN Project Setup
@@ -504,12 +497,13 @@ Phase 4 (Testing & Schema) - NOT STARTED
 
 ## Quick Start
 
-**Backend is complete.** Next steps are Phase 3 (Mobile App):
+**Backend is partially complete.** Missing service files must be implemented before Phase 3 (Mobile App):
 
-1. **Week 5:** Initialize React Native project (Task 14)
-2. **Week 6-7:** Build UI screens and navigation (Tasks 15-19)
-3. **Week 8:** Calendar and Sound Library UI (Tasks 20-21)
-4. **Week 9-10:** Integration and E2E testing (Tasks 22-23)
+1. **Week 5:** Implement missing service files (chain_engine, voice_generator, message_templates, feedback_loop, stats_service, audio_importer)
+2. **Week 6:** Initialize React Native project (Task 14)
+3. **Week 6-7:** Build UI screens and navigation (Tasks 15-19)
+4. **Week 8:** Calendar and Sound Library UI (Tasks 20-21)
+5. **Week 9-10:** Integration and E2E testing (Tasks 22-23)
 
 ---
 
