@@ -17,8 +17,8 @@ This document maps the specification requirements to implementation tasks, prior
 | 9. Snooze & Dismissal | ✅ Complete | `src/backend/services/snooze_handler.py`, `dismissal_handler.py` |
 | 10. Voice Personality | ❌ NOT STARTED | No voice_generator.py or message_templates.py created per spec Section 10 |
 | 11. History & Stats | ❌ NOT STARTED | No stats_service.py or feedback_loop.py created per spec Section 11 |
-| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, but `audio_importer.py` not implemented |
-| 13. Data Persistence | ⚠️ Partial | Schema exists but missing `recurrence_rule`, streak counter, user_preferences `updated_at` |
+| 12. Sound Library | ⚠️ Partial | `sound_manager.py` exists, `audio_importer.py` NOT created per spec Section 12 |
+| 13. Data Persistence | ⚠️ Partial | Schema exists but missing `recurrence_rule` in reminders, streak counter, user_preferences `updated_at` |
 | 14. Definition of Done | ❌ NOT STARTED | No tests exist - `tests/` directory does not exist |
 
 ### Current Implementation Status
@@ -46,7 +46,6 @@ This document maps the specification requirements to implementation tasks, prior
 - `reminder_type`: Schema has `countdown_event` DEFAULT. **Missing explicit enum values:** `simple_countdown`, `morning_routine`, `standing_recurring`
 - No `recurrence_rule` field for recurring reminders (spec Section 1.3, 3.3) — NOT IN SCHEMA
 - No persistent streak counter for recurring reminders (spec Section 11.3) — NOT IN SCHEMA
-- No persistent streak counter field in reminders table (spec Section 11.3) — NOT IN SCHEMA
 - Quiet hours not persisted to user_preferences table (config in memory only)
 - user_preferences table missing `updated_at` column (spec Section 13.2)
 
@@ -256,8 +255,8 @@ This document maps the specification requirements to implementation tasks, prior
 #### 13. Sound Library [PENDING]
 **Spec Ref:** Section 12.3, 12.4
 **Task:** Implement sound selection and custom import
-- Bundle 5 built-in sounds per category (commute, routine, errand) - ✅ DONE
-- **Create `src/backend/adapters/audio_importer.py` for custom imports**
+- Bundle 5 built-in sounds per category (commute, routine, errand) - ✅ DONE (bundled, no actual audio files)
+- **Create `src/backend/adapters/audio_importer.py` for custom imports** - ❌ NOT STARTED
 - Support MP3, WAV, M4A import (max 30 sec)
 - Transcode and normalize imported sounds
 - Per-reminder sound selection
