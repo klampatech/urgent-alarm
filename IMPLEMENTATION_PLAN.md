@@ -114,7 +114,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All spec test scenarios pass
 **Files:** `src/backend/services/chain_engine.py`, `tests/unit/test_chain_engine.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - Logic exists in `test_server.py:138-216` but needs extraction to proper service module
+> **Status:** ❌ NOT IMPLEMENTED - Logic EXISTS in `test_server.py:138-216` (URGENCY_TIERS dict, compute_escalation_chain(), validate_chain(), get_next_unfired_anchor()) but needs extraction to proper service module
 
 #### 3. LLM Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 3.3, 3.4, 3.5
@@ -155,7 +155,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/voice_generator.py`, `src/backend/services/message_templates.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - Need to create dedicated service files
+> **Status:** ❌ NOT IMPLEMENTED - Need to create dedicated service files. Voice personality templates ARE defined in `test_server.py:372-570` (VOICE_PERSONALITIES dict with 4 personalities × 8 tiers × 3 variations)
 
 #### 6. TTS Adapter Interface & Mock [x] COMPLETED
 **Spec Ref:** Section 4.3, 4.4
@@ -182,7 +182,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 7 test scenarios pass
 **Files:** `src/backend/services/stats_service.py`, `src/backend/services/feedback_loop.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - Logic needs to be extracted from test_server.py to dedicated service files
+> **Status:** ❌ NOT IMPLEMENTED - Logic needs to be extracted from test_server.py to dedicated service files. Stats logic EXISTS in `test_server.py:572-650` (get_weekly_hit_rate, get_streak, get_common_miss_window functions)
 
 #### 8. Snooze & Dismissal Flow [x] COMPLETED
 **Spec Ref:** Section 9.3, 9.4
@@ -272,7 +272,7 @@ This document maps the specification requirements to implementation tasks, prior
 - **Acceptance Criteria:** All 5 test scenarios pass
 **Files:** `src/backend/services/sound_manager.py`, `src/backend/adapters/audio_importer.py`
 
-> **Status:** ❌ NOT IMPLEMENTED - `sound_manager.py` exists, `audio_importer.py` NOT YET CREATED
+> **Status:** ❌ NOT IMPLEMENTED - `sound_manager.py` exists, `audio_importer.py` NOT YET CREATED. Note: Built-in sounds stub exists in sound_manager.py, actual audio files not included
 
 ---
 
@@ -449,11 +449,11 @@ This document maps the specification requirements to implementation tasks, prior
 ### Missing Service Files (per spec Section 2-12)
 
 **These files MUST be created (logic exists in test_server.py but needs extraction):**
-- ❌ `src/backend/services/chain_engine.py` — chain logic in `test_server.py:138-216`
-- ❌ `src/backend/services/voice_generator.py` — voice message generation needs extraction
-- ❌ `src/backend/services/message_templates.py` — message templates need extraction
-- ❌ `src/backend/services/feedback_loop.py` — feedback logic needs extraction
-- ❌ `src/backend/services/stats_service.py` — stats computation needs extraction
+- ❌ `src/backend/services/chain_engine.py` — chain logic in `test_server.py:138-216` (URGENCY_TIERS, compute_escalation_chain, validate_chain, get_next_unfired_anchor)
+- ❌ `src/backend/services/voice_generator.py` — message generation logic in `test_server.py`
+- ❌ `src/backend/services/message_templates.py` — message templates in `test_server.py:372-570` (VOICE_PERSONALITIES dict)
+- ❌ `src/backend/services/feedback_loop.py` — feedback logic in `test_server.py:572-650`
+- ❌ `src/backend/services/stats_service.py` — stats logic in `test_server.py:572-650` (get_weekly_hit_rate, get_streak, get_common_miss_window)
 - ❌ `src/backend/adapters/audio_importer.py` — custom sound import not implemented
 
 ### Other Technical Debt
